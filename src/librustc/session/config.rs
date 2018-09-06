@@ -1356,6 +1356,8 @@ options! {DebuggingOptions, DebuggingSetter, basic_debugging_options,
           "run the self profiler"),
     profile_json: bool = (false, parse_bool, [UNTRACKED],
           "output a json file with profiler results"),
+    polly: bool = (false, parse_bool, [UNTRACKED], "Run the Polly polyhedral \
+           model optimization passes."),
 }
 
 pub fn default_lib_output() -> CrateType {

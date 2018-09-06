@@ -72,6 +72,8 @@ RUN ./build-python.sh
 COPY dist-x86_64-linux/build-clang.sh /tmp/
 RUN ./build-clang.sh
 ENV CC=clang CXX=clang++
+ENV CFLAGS="-DPATH_MAX=4096 ${CFLAGS}"
+ENV CXXFLAGS="-DPATH_MAX=4096 ${CXXFLAGS}"
 
 # Apparently CentOS 5.5 desn't have `git` in yum, but we're gonna need it for
 # cloning, so download and build it here.

@@ -262,6 +262,7 @@ pub struct ModuleConfig {
     no_integrated_as: bool,
     embed_bitcode: bool,
     embed_bitcode_marker: bool,
+    pub polly: bool,
 }
 
 impl ModuleConfig {
@@ -294,7 +295,8 @@ impl ModuleConfig {
             vectorize_loop: false,
             vectorize_slp: false,
             merge_functions: false,
-            inline_threshold: None
+            inline_threshold: None,
+            polly: false,
         }
     }
 
@@ -333,6 +335,8 @@ impl ModuleConfig {
 
         self.merge_functions = sess.opts.optimize == config::OptLevel::Default ||
                                sess.opts.optimize == config::OptLevel::Aggressive;
+        self.polly = sess.opts.debugging_opts.polly && !self.no_prepopulate_passes &&
+                     !sess.target.target.options.is_like_emscripten;
     }
 }
 
@@ -563,8 +567,8 @@ unsafe fn optimize(cgcx: &CodegenContext,
                 || config.obj_is_bitcode || config.emit_bc_compressed || config.embed_bitcode);
             let mut have_name_anon_globals_pass = false;
             if !config.no_prepopulate_passes {
-                llvm::LLVMRustAddAnalysisPasses(tm, fpm, llmod);
-                llvm::LLVMRustAddAnalysisPasses(tm, mpm, llmod);
+                llvm::LLVMRustAddAnalysisPasses(tm, fpm, llmod, config.polly);
+                llvm::LLVMRustAddAnalysisPasses(tm, mpm, llmod, config.polly);
                 let opt_level = config.opt_level.unwrap_or(llvm::CodeGenOptLevel::None);
                 let prepare_for_thin_lto = cgcx.lto == Lto::Thin || cgcx.lto == Lto::ThinLocal ||
                     (cgcx.lto != Lto::Fat && cgcx.opts.debugging_opts.cross_lang_lto.enabled());
@@ -697,11 +701,12 @@ unsafe fn codegen(cgcx: &CodegenContext,
         unsafe fn with_codegen<'ll, F, R>(tm: &'ll llvm::TargetMachine,
                                     llmod: &'ll llvm::Module,
                                     no_builtins: bool,
+                                    polly: bool,
                                     f: F) -> R
             where F: FnOnce(&'ll mut PassManager<'ll>) -> R,
         {
             let cpm = llvm::LLVMCreatePassManager();
-            llvm::LLVMRustAddAnalysisPasses(tm, cpm, llmod);
+            llvm::LLVMRustAddAnalysisPasses(tm, cpm, llmod, polly);
             llvm::LLVMRustAddLibraryInfo(cpm, llmod, no_builtins);
             f(cpm)
         }
@@ -796,7 +801,8 @@ unsafe fn codegen(cgcx: &CodegenContext,
                     cursor.position() as size_t
                 }
 
-                with_codegen(tm, llmod, config.no_builtins, |cpm| {
+                with_codegen(tm, llmod, config.no_builtins, config.polly,
+                             |cpm| {
                     llvm::LLVMRustPrintModule(cpm, llmod, out.as_ptr(), demangle_callback);
                     llvm::LLVMDisposePassManager(cpm);
                 });
@@ -814,7 +820,8 @@ unsafe fn codegen(cgcx: &CodegenContext,
                 } else {
                     llmod
                 };
-                with_codegen(tm, llmod, config.no_builtins, |cpm| {
+                with_codegen(tm, llmod, config.no_builtins, config.polly,
+                             |cpm| {
                     write_output_file(diag_handler, tm, cpm, llmod, &path,
                                     llvm::FileType::AssemblyFile)
                 })?;
@@ -822,7 +829,8 @@ unsafe fn codegen(cgcx: &CodegenContext,
             }
 
             if write_obj {
-                with_codegen(tm, llmod, config.no_builtins, |cpm| {
+                with_codegen(tm, llmod, config.no_builtins, config.polly,
+                             |cpm| {
                     write_output_file(diag_handler, tm, cpm, llmod, &obj_out,
                                     llvm::FileType::ObjectFile)
                 })?;
@@ -2218,7 +2226,8 @@ pub unsafe fn with_llvm_pmb(llmod: &llvm::Module,
         llvm::LLVMPassManagerBuilderSetDisableUnrollLoops(builder, 1);
     }
 
-    llvm::LLVMRustAddBuilderLibraryInfo(builder, llmod, config.no_builtins);
+    llvm::LLVMRustAddBuilderLibraryInfo(builder, llmod, config.no_builtins,
+                                        config.polly);
 
     // Here we match what clang does (kinda). For O0 we only inline
     // always-inline functions (but don't add lifetime intrinsics), at O1 we
