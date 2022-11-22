@@ -16,6 +16,7 @@ pub fn target() -> Target {
             features: "+neon,+fp-armv8".into(),
             supported_sanitizers: SanitizerSet::CFI
                 | SanitizerSet::HWADDRESS
+                | SanitizerSet::KCFI
                 | SanitizerSet::MEMTAG
                 | SanitizerSet::SHADOWCALLSTACK
                 | SanitizerSet::ADDRESS,
