@@ -74,7 +74,7 @@ LL | trait ProjectionPred<T:Iterator = IntoIter<i32>> where T::Item : Add<u8> {}
              <&'a i64 as Add<i64>>
              <&'a i8 as Add<i8>>
              <&'a isize as Add<isize>>
-           and 48 others
+           and 63 others
 
 error: aborting due to 7 previous errors
 

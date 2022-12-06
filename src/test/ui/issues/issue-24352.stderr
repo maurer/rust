@@ -14,7 +14,7 @@ LL |     1.0f64 - 1
              <&'a i64 as Sub<i64>>
              <&'a i8 as Sub<i8>>
              <&'a isize as Sub<isize>>
-           and 48 others
+           and 63 others
 help: consider using a floating-point literal by writing it with `.0`
    |
 LL |     1.0f64 - 1.0

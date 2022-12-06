@@ -464,6 +464,7 @@ symbols! {
         cfg_target_vendor,
         cfg_version,
         cfi,
+        cfi_name,
         char,
         client,
         clippy,

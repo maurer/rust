@@ -29,7 +29,7 @@ LL |     a = c + b * 5;
              <&'a i64 as Add<i64>>
              <&'a i8 as Add<i8>>
              <&'a isize as Add<isize>>
-           and 48 others
+           and 63 others
 
 error: aborting due to 3 previous errors
 

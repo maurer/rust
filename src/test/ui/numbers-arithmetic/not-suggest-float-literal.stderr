@@ -14,7 +14,7 @@ LL |     x + 100.0
              <&'a i64 as Add<i64>>
              <&'a i8 as Add<i8>>
              <&'a isize as Add<isize>>
-           and 48 others
+           and 63 others
 
 error[E0277]: cannot add `&str` to `f64`
   --> $DIR/not-suggest-float-literal.rs:6:7
@@ -32,7 +32,7 @@ LL |     x + "foo"
              <&'a i64 as Add<i64>>
              <&'a i8 as Add<i8>>
              <&'a isize as Add<isize>>
-           and 48 others
+           and 63 others
 
 error[E0277]: cannot add `{integer}` to `f64`
   --> $DIR/not-suggest-float-literal.rs:11:7
@@ -50,7 +50,7 @@ LL |     x + y
              <&'a i64 as Add<i64>>
              <&'a i8 as Add<i8>>
              <&'a isize as Add<isize>>
-           and 48 others
+           and 63 others
 
 error[E0277]: cannot subtract `{float}` from `u8`
   --> $DIR/not-suggest-float-literal.rs:15:7
@@ -68,7 +68,7 @@ LL |     x - 100.0
              <&'a i64 as Sub<i64>>
              <&'a i8 as Sub<i8>>
              <&'a isize as Sub<isize>>
-           and 48 others
+           and 63 others
 
 error[E0277]: cannot subtract `&str` from `f64`
   --> $DIR/not-suggest-float-literal.rs:19:7
@@ -86,7 +86,7 @@ LL |     x - "foo"
              <&'a i64 as Sub<i64>>
              <&'a i8 as Sub<i8>>
              <&'a isize as Sub<isize>>
-           and 48 others
+           and 63 others
 
 error[E0277]: cannot subtract `{integer}` from `f64`
   --> $DIR/not-suggest-float-literal.rs:24:7
@@ -104,7 +104,7 @@ LL |     x - y
              <&'a i64 as Sub<i64>>
              <&'a i8 as Sub<i8>>
              <&'a isize as Sub<isize>>
-           and 48 others
+           and 63 others
 
 error[E0277]: cannot multiply `u8` by `{float}`
   --> $DIR/not-suggest-float-literal.rs:28:7
@@ -122,7 +122,7 @@ LL |     x * 100.0
              <&'a i64 as Mul<i64>>
              <&'a i8 as Mul<i8>>
              <&'a isize as Mul<isize>>
-           and 49 others
+           and 64 others
 
 error[E0277]: cannot multiply `f64` by `&str`
   --> $DIR/not-suggest-float-literal.rs:32:7
@@ -140,7 +140,7 @@ LL |     x * "foo"
              <&'a i64 as Mul<i64>>
              <&'a i8 as Mul<i8>>
              <&'a isize as Mul<isize>>
-           and 49 others
+           and 64 others
 
 error[E0277]: cannot multiply `f64` by `{integer}`
   --> $DIR/not-suggest-float-literal.rs:37:7
@@ -158,7 +158,7 @@ LL |     x * y
              <&'a i64 as Mul<i64>>
              <&'a i8 as Mul<i8>>
              <&'a isize as Mul<isize>>
-           and 49 others
+           and 64 others
 
 error[E0277]: cannot divide `u8` by `{float}`
   --> $DIR/not-suggest-float-literal.rs:41:7
@@ -176,7 +176,7 @@ LL |     x / 100.0
              <&'a i64 as Div<i64>>
              <&'a i8 as Div<i8>>
              <&'a isize as Div<isize>>
-           and 54 others
+           and 69 others
 
 error[E0277]: cannot divide `f64` by `&str`
   --> $DIR/not-suggest-float-literal.rs:45:7
@@ -194,7 +194,7 @@ LL |     x / "foo"
              <&'a i64 as Div<i64>>
              <&'a i8 as Div<i8>>
              <&'a isize as Div<isize>>
-           and 54 others
+           and 69 others
 
 error[E0277]: cannot divide `f64` by `{integer}`
   --> $DIR/not-suggest-float-literal.rs:50:7
@@ -212,7 +212,7 @@ LL |     x / y
              <&'a i64 as Div<i64>>
              <&'a i8 as Div<i8>>
              <&'a isize as Div<isize>>
-           and 54 others
+           and 69 others
 
 error: aborting due to 12 previous errors
 

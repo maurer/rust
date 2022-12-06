@@ -37,7 +37,6 @@
 //!    compiler. This is often mapped to GCC's personality function, but crates
 //!    which do not trigger a panic can be assured that this function is never
 //!    called. The `lang` attribute is called `eh_personality`.
-
 // Since libcore defines many fundamental lang items, all tests live in a
 // separate crate, libcoretest, to avoid bizarre issues.
 //
@@ -188,6 +187,7 @@
 #![feature(cfg_sanitize)]
 #![feature(cfg_target_has_atomic)]
 #![feature(cfg_target_has_atomic_equal_alignment)]
+#![cfg_attr(not(bootstrap), feature(cfi_name))]
 #![feature(const_fn_floating_point_arithmetic)]
 #![feature(const_mut_refs)]
 #![feature(const_precise_live_drops)]

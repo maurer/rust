@@ -487,6 +487,8 @@ pub const BUILTIN_ATTRIBUTES: &[BuiltinAttribute] = &[
         experimental!(collapse_debuginfo)
     ),
 
+    gated!(cfi_name, Normal, template!(NameValueStr: "string"), ErrorFollowing, experimental!(cfi_name)),
+
     // ==========================================================================
     // Internal attributes: Stability, deprecation, and unsafe:
     // ==========================================================================

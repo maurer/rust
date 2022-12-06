@@ -171,4 +171,7 @@ pub use core::ffi::c_void;
 )]
 pub use core::ffi::{VaList, VaListImpl};
 
+#[unstable(feature = "cfi_name", issue = "89653")]
+pub use core::ffi::cfi;
+
 mod os_str;

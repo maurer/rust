@@ -14,7 +14,7 @@ LL |     x * y
              <&'a i64 as Mul<i64>>
              <&'a i8 as Mul<i8>>
              <&'a isize as Mul<isize>>
-           and 49 others
+           and 64 others
 
 error: aborting due to previous error
 

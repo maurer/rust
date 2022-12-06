@@ -14,7 +14,7 @@ LL |     x + 100
              <&'a i64 as Add<i64>>
              <&'a i8 as Add<i8>>
              <&'a isize as Add<isize>>
-           and 48 others
+           and 63 others
 help: consider using a floating-point literal by writing it with `.0`
    |
 LL |     x + 100.0
@@ -36,7 +36,7 @@ LL |     x + 100
              <&'a i64 as Add<i64>>
              <&'a i8 as Add<i8>>
              <&'a isize as Add<isize>>
-           and 48 others
+           and 63 others
 help: consider using a floating-point literal by writing it with `.0`
    |
 LL |     x + 100.0
@@ -58,7 +58,7 @@ LL |     x - 100
              <&'a i64 as Sub<i64>>
              <&'a i8 as Sub<i8>>
              <&'a isize as Sub<isize>>
-           and 48 others
+           and 63 others
 help: consider using a floating-point literal by writing it with `.0`
    |
 LL |     x - 100.0
@@ -80,7 +80,7 @@ LL |     x - 100
              <&'a i64 as Sub<i64>>
              <&'a i8 as Sub<i8>>
              <&'a isize as Sub<isize>>
-           and 48 others
+           and 63 others
 help: consider using a floating-point literal by writing it with `.0`
    |
 LL |     x - 100.0
@@ -102,7 +102,7 @@ LL |     x * 100
              <&'a i64 as Mul<i64>>
              <&'a i8 as Mul<i8>>
              <&'a isize as Mul<isize>>
-           and 49 others
+           and 64 others
 help: consider using a floating-point literal by writing it with `.0`
    |
 LL |     x * 100.0
@@ -124,7 +124,7 @@ LL |     x * 100
              <&'a i64 as Mul<i64>>
              <&'a i8 as Mul<i8>>
              <&'a isize as Mul<isize>>
-           and 49 others
+           and 64 others
 help: consider using a floating-point literal by writing it with `.0`
    |
 LL |     x * 100.0
@@ -146,7 +146,7 @@ LL |     x / 100
              <&'a i64 as Div<i64>>
              <&'a i8 as Div<i8>>
              <&'a isize as Div<isize>>
-           and 54 others
+           and 69 others
 help: consider using a floating-point literal by writing it with `.0`
    |
 LL |     x / 100.0
@@ -168,7 +168,7 @@ LL |     x / 100
              <&'a i64 as Div<i64>>
              <&'a i8 as Div<i8>>
              <&'a isize as Div<isize>>
-           and 54 others
+           and 69 others
 help: consider using a floating-point literal by writing it with `.0`
    |
 LL |     x / 100.0

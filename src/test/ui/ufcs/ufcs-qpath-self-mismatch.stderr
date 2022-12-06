@@ -16,7 +16,7 @@ LL |     <i32 as Add<u32>>::add(1, 2);
              <&'a i64 as Add<i64>>
              <&'a i8 as Add<i8>>
              <&'a isize as Add<isize>>
-           and 48 others
+           and 63 others
 
 error[E0308]: mismatched types
   --> $DIR/ufcs-qpath-self-mismatch.rs:7:28
@@ -70,7 +70,7 @@ LL |     <i32 as Add<u32>>::add(1, 2);
              <&'a i64 as Add<i64>>
              <&'a i8 as Add<i8>>
              <&'a isize as Add<isize>>
-           and 48 others
+           and 63 others
 
 error: aborting due to 4 previous errors
 

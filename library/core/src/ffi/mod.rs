@@ -19,6 +19,9 @@ pub use self::c_str::{CStr, FromBytesUntilNulError, FromBytesWithNulError};
 
 mod c_str;
 
+#[unstable(feature = "cfi_name", issue = "89653")]
+pub mod cfi;
+
 macro_rules! type_alias_no_nz {
     {
       $Docfile:tt, $Alias:ident = $Real:ty;

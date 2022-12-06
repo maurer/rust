@@ -1,10 +1,6 @@
 // For more information about type metadata and type metadata identifiers for cross-language LLVM
 // CFI support, see Type metadata in the design document in the tracking issue #89653.
 
-// FIXME(rcvalle): Identify C char and integer type uses and encode them with their respective
-// builtin type encodings as specified by the Itanium C++ ABI for extern function types with the "C"
-// calling convention to use this encoding for cross-language LLVM CFI.
-
 use bitflags::bitflags;
 use core::fmt::Display;
 use rustc_data_structures::base_n;
@@ -539,7 +535,13 @@ fn encode_ty<'tcx>(
         ty::Adt(adt_def, substs) => {
             let mut s = String::new();
             let def_id = adt_def.0.did;
-            if options.contains(EncodeTyOptions::GENERALIZE_REPR_C) && adt_def.repr().c() {
+            if let Some(override_name) = tcx.get_attr(def_id, sym::cfi_name) {
+                // If the user set an explicit cfi_name for this type, ignore the actual type and
+                // use the provided encoding.
+                let name =
+                    override_name.value_str().expect("cfi_name must have a value").to_string();
+                let _ = write!(s, "{}", &name);
+            } else if options.contains(EncodeTyOptions::GENERALIZE_REPR_C) && adt_def.repr().c() {
                 // For cross-language CFI support, the encoding must be compatible at the FFI
                 // boundary. For instance:
                 //
@@ -555,15 +557,14 @@ fn encode_ty<'tcx>(
                 // <name> is <unscoped-name>.
                 let name = tcx.item_name(def_id).to_string();
                 let _ = write!(s, "{}{}", name.len(), &name);
-                compress(dict, DictKey::Ty(ty, TyQ::None), &mut s);
             } else {
                 // u<length><name>[I<element-type1..element-typeN>E], where <element-type> is
                 // <subst>, as vendor extended type.
                 let name = encode_ty_name(tcx, def_id);
                 let _ = write!(s, "u{}{}", name.len(), &name);
                 s.push_str(&encode_substs(tcx, substs, dict, options));
-                compress(dict, DictKey::Ty(ty, TyQ::None), &mut s);
             }
+            compress(dict, DictKey::Ty(ty, TyQ::None), &mut s);
             typeid.push_str(&s);
         }
 
@@ -690,7 +691,11 @@ fn transform_ty<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>, options: TransformTyOptio
         }
 
         ty::Adt(adt_def, substs) => {
-            if is_c_void_ty(tcx, ty) {
+            let def_id = adt_def.0.did;
+            if tcx.get_attr(def_id, sym::cfi_name).is_some() {
+                // If the user overrode the type name, don't attempt to transform it, as that may
+                // lose the annotation.
+            } else if is_c_void_ty(tcx, ty) {
                 ty = tcx.mk_unit();
             } else if options.contains(TransformTyOptions::GENERALIZE_REPR_C) && adt_def.repr().c()
             {
