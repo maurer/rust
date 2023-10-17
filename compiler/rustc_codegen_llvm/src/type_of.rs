@@ -1,5 +1,6 @@
 use crate::common::*;
 use crate::context::TypeLowering;
+use crate::llvm_util;
 use crate::type_::Type;
 use rustc_codegen_ssa::traits::*;
 use rustc_middle::bug;
@@ -10,6 +11,7 @@ use rustc_target::abi::HasDataLayout;
 use rustc_target::abi::{Abi, Align, FieldsShape};
 use rustc_target::abi::{Int, Pointer, F32, F64};
 use rustc_target::abi::{PointeeInfo, Scalar, Size, TyAbiInterface, Variants};
+use rustc_target::spec::HasTargetSpec;
 use smallvec::{smallvec, SmallVec};
 
 use std::fmt::Write;
@@ -27,13 +29,15 @@ fn uncached_llvm_type<'a, 'tcx>(
             return cx.type_vector(element, count);
         }
         Abi::ScalarPair(..) => {
-            return cx.type_struct(
-                &[
-                    layout.scalar_pair_element_llvm_type(cx, 0, false),
-                    layout.scalar_pair_element_llvm_type(cx, 1, false),
-                ],
-                false,
-            );
+            if !scalar_pair_needs_rewrite(layout.abi, cx) {
+                return cx.type_struct(
+                    &[
+                        layout.scalar_pair_element_llvm_type(cx, 0, false),
+                        layout.scalar_pair_element_llvm_type(cx, 1, false),
+                    ],
+                    false,
+                );
+            }
         }
         Abi::Uninhabited | Abi::Aggregate { .. } => {}
     }
@@ -173,7 +177,7 @@ impl<'a, 'tcx> CodegenCx<'a, 'tcx> {
 
 pub trait LayoutLlvmExt<'tcx> {
     fn is_llvm_immediate(&self) -> bool;
-    fn is_llvm_scalar_pair(&self) -> bool;
+    fn is_llvm_scalar_pair<'a>(&self, cx: &CodegenCx<'a, 'tcx>) -> bool;
     fn llvm_type<'a>(&self, cx: &CodegenCx<'a, 'tcx>) -> &'a Type;
     fn immediate_llvm_type<'a>(&self, cx: &CodegenCx<'a, 'tcx>) -> &'a Type;
     fn scalar_llvm_type_at<'a>(&self, cx: &CodegenCx<'a, 'tcx>, scalar: Scalar) -> &'a Type;
@@ -188,6 +192,23 @@ pub trait LayoutLlvmExt<'tcx> {
     fn scalar_copy_llvm_type<'a>(&self, cx: &CodegenCx<'a, 'tcx>) -> Option<&'a Type>;
 }
 
+#[inline]
+fn scalar_pair_needs_rewrite<'a, 'tcx>(abi: Abi, cx: &CodegenCx<'a, 'tcx>) -> bool {
+    // Older LLVMs don't know about the i128 alignment. Rewrite scalar pairs to structs.
+    // TODO move documentation comment here
+    // TODO likely/unlikely annotate this for speed?
+    if llvm_util::get_version() < (18, 0, 0) {
+        if let Abi::ScalarPair(_, s1) = abi {
+            if s1.size(cx).bits() == 128 {
+                if cx.target_spec().arch == "x86" || cx.target_spec().arch == "x86_64" {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 impl<'tcx> LayoutLlvmExt<'tcx> for TyAndLayout<'tcx> {
     fn is_llvm_immediate(&self) -> bool {
         match self.abi {
@@ -196,9 +217,9 @@ impl<'tcx> LayoutLlvmExt<'tcx> for TyAndLayout<'tcx> {
         }
     }
 
-    fn is_llvm_scalar_pair(&self) -> bool {
+    fn is_llvm_scalar_pair<'a>(&self, cx: &CodegenCx<'a, 'tcx>) -> bool {
         match self.abi {
-            Abi::ScalarPair(..) => true,
+            Abi::ScalarPair(..) => !scalar_pair_needs_rewrite(self.abi, cx),
             Abi::Uninhabited | Abi::Scalar(_) | Abi::Vector { .. } | Abi::Aggregate { .. } => false,
         }
     }

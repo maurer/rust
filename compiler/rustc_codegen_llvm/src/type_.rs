@@ -252,7 +252,7 @@ impl<'ll, 'tcx> LayoutTypeMethods<'tcx> for CodegenCx<'ll, 'tcx> {
         layout.is_llvm_immediate()
     }
     fn is_backend_scalar_pair(&self, layout: TyAndLayout<'tcx>) -> bool {
-        layout.is_llvm_scalar_pair()
+        layout.is_llvm_scalar_pair(self)
     }
     fn backend_field_index(&self, layout: TyAndLayout<'tcx>, index: usize) -> u64 {
         layout.llvm_field_index(self, index)

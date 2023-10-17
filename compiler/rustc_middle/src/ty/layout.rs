@@ -934,7 +934,8 @@ where
 
                         // Discriminant field for enums (where applicable).
                         Variants::Multiple { tag, .. } => {
-                            assert_eq!(i, 0);
+                            // If we lifted a ScalarPair to a struct, the tag may be second.
+                            assert!(i == 0 || i == 1);
                             return TyMaybeWithLayout::TyAndLayout(tag_layout(tag));
                         }
                     }

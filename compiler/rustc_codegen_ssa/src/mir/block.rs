@@ -1314,6 +1314,19 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                     llargs.push(b);
                     return;
                 }
+                Ref(llval, None, align) => {
+                    debug!("pair/ref override: {arg:?}");
+                    // FIXME: validation
+                    let tmp = PlaceRef::new_sized_aligned(llval, arg.layout, align);
+                    let (f0, f1) = tmp.project_scalar_pair(bx);
+                    let or0 = bx.load_operand(f0);
+                    let Immediate(t0) = or0.val else { panic!("boom") };
+                    llargs.push(t0);
+                    let or1 = bx.load_operand(f1);
+                    let Immediate(t1) = or1.val else { panic!("Non-immediate in variant passed by pair: {:?}", or1.val) };
+                    llargs.push(t1);
+                    return;
+                }
                 _ => bug!("codegen_argument: {:?} invalid for pair argument", op),
             },
             PassMode::Indirect { attrs: _, meta_attrs: Some(_), on_stack: _ } => match op.val {

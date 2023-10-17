@@ -418,6 +418,43 @@ impl<'a, 'tcx, V: CodegenObject> PlaceRef<'tcx, V> {
         downcast
     }
 
+    // TODO clean this up to not use vec since it's expensive
+    fn project_scalars<Bx: BuilderMethods<'a, 'tcx, Value = V>>(
+        &self,
+        bx: &mut Bx,
+        out: &mut Vec<Self>,
+    ) {
+        if self.layout.abi.is_scalar() {
+          if out.iter().all(|s| s.llval != self.llval) {
+            out.push(*self);
+          }
+          return
+        }
+        for field_idx in 0..self.layout.fields.count() {
+            let field = self.project_field(bx, field_idx);
+            field.project_scalars(bx, out);
+        }
+        if let Variants::Multiple { ref variants, .. } = self.layout.variants {
+            // FIXME - creating VariantIdx like this seems wrong?
+            for variant_idx in 0..variants.len() {
+                let variant = self.project_downcast(bx, VariantIdx::from_usize(variant_idx));
+                variant.project_scalars(bx, out);
+            }
+        }
+    }
+
+    pub fn project_scalar_pair<Bx: BuilderMethods<'a, 'tcx, Value = V>>(
+        &self,
+        bx: &mut Bx,
+    ) -> (Self, Self) {
+        let mut out = Vec::new();
+        self.project_scalars(bx, &mut out);
+        if out.len() != 2 {
+            debug!("scalar projection: {out:?}");
+        }
+        (out[0], out[1])
+    }
+ 
     pub fn storage_live<Bx: BuilderMethods<'a, 'tcx, Value = V>>(&self, bx: &mut Bx) {
         bx.lifetime_start(self.llval, self.layout.size);
     }

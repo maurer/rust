@@ -16,6 +16,7 @@ use rustc_codegen_ssa::traits::*;
 use rustc_codegen_ssa::MemFlags;
 use rustc_data_structures::small_c_str::SmallCStr;
 use rustc_hir::def_id::DefId;
+use rustc_middle::bug;
 use rustc_middle::middle::codegen_fn_attrs::CodegenFnAttrs;
 use rustc_middle::ty::layout::{
     FnAbiError, FnAbiOfHelpers, FnAbiRequest, LayoutError, LayoutOfHelpers, TyAndLayout,
@@ -552,22 +553,26 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                 load
             });
             OperandValue::Immediate(self.to_immediate(llval, place.layout))
-        } else if let abi::Abi::ScalarPair(a, b) = place.layout.abi {
-            let b_offset = a.size(self).align_to(b.align(self).abi);
-            let pair_ty = place.layout.llvm_type(self);
+        } else if place.layout.is_llvm_scalar_pair(self.cx) {
+            if let abi::Abi::ScalarPair(a, b) = place.layout.abi {
+                let b_offset = a.size(self).align_to(b.align(self).abi);
+                let pair_ty = place.layout.llvm_type(self);
 
-            let mut load = |i, scalar: abi::Scalar, layout, align, offset| {
-                let llptr = self.struct_gep(pair_ty, place.llval, i as u64);
-                let llty = place.layout.scalar_pair_element_llvm_type(self, i, false);
-                let load = self.load(llty, llptr, align);
-                scalar_load_metadata(self, load, scalar, layout, offset);
-                self.to_immediate_scalar(load, scalar)
-            };
+                let mut load = |i, scalar: abi::Scalar, layout, align, offset| {
+                    let llptr = self.struct_gep(pair_ty, place.llval, i as u64);
+                    let llty = place.layout.scalar_pair_element_llvm_type(self, i, false);
+                    let load = self.load(llty, llptr, align);
+                    scalar_load_metadata(self, load, scalar, layout, offset);
+                    self.to_immediate_scalar(load, scalar)
+                };
 
-            OperandValue::Pair(
-                load(0, a, place.layout, place.align, Size::ZERO),
-                load(1, b, place.layout, place.align.restrict_for_offset(b_offset), b_offset),
-            )
+                OperandValue::Pair(
+                    load(0, a, place.layout, place.align, Size::ZERO),
+                    load(1, b, place.layout, place.align.restrict_for_offset(b_offset), b_offset),
+                )
+            } else {
+                bug!("is_llvm_scalar_pair() == true, but ABI is {:?}", place.layout.abi)
+            }
         } else {
             OperandValue::Ref(place.llval, None, place.align)
         };

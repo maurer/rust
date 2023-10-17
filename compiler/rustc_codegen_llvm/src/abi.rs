@@ -264,6 +264,7 @@ impl<'ll, 'tcx> ArgAbiExt<'ll, 'tcx> for ArgAbi<'tcx, Ty<'tcx>> {
         idx: &mut usize,
         dst: PlaceRef<'tcx, &'ll Value>,
     ) {
+        let idx_base = *idx;
         let mut next = || {
             let val = llvm::get_param(bx.llfn(), *idx as c_uint);
             *idx += 1;
@@ -272,7 +273,20 @@ impl<'ll, 'tcx> ArgAbiExt<'ll, 'tcx> for ArgAbi<'tcx, Ty<'tcx>> {
         match self.mode {
             PassMode::Ignore => {}
             PassMode::Pair(..) => {
-                OperandValue::Pair(next(), next()).store(bx, dst);
+                // Workaround for struct translation of ScalarPairs
+                if dst.layout.is_llvm_scalar_pair(bx.cx()) {
+                    OperandValue::Pair(next(), next()).store(bx, dst);
+                } else {
+                    debug!("pair-rewrite: dst: {dst:?}, idx: {idx_base:?}");
+                    // If we were translated to a struct, initialize the non-padding
+                    // struct portions.
+                    // FIXME: unhardcode this 
+                    let a0 = next();
+                    let a1 = next();
+                    let (f0, f1) = dst.project_scalar_pair(bx);
+                    self.store(bx, a0, f0);
+                    self.store(bx, a1, f1);
+                }
             }
             PassMode::Indirect { attrs: _, meta_attrs: Some(_), on_stack: _ } => {
                 OperandValue::Ref(next(), Some(next()), self.layout.align.abi).store(bx, dst);
@@ -331,6 +345,7 @@ impl<'ll, 'tcx> FnAbiLlvmExt<'ll, 'tcx> for FnAbi<'tcx, Ty<'tcx>> {
 
         let llreturn_ty = match &self.ret.mode {
             PassMode::Ignore => cx.type_void(),
+            // MARK we may need to override this to indirect? direct? research needed
             PassMode::Direct(_) | PassMode::Pair(..) => self.ret.layout.immediate_llvm_type(cx),
             PassMode::Cast { cast, pad_i32: _ } => cast.llvm_type(cx),
             PassMode::Indirect { .. } => {
@@ -379,6 +394,7 @@ impl<'ll, 'tcx> FnAbiLlvmExt<'ll, 'tcx> for FnAbi<'tcx, Ty<'tcx>> {
                         "PassMode::Pair for type {}",
                         arg.layout.ty
                     );
+                    // TODO add assert that it doesn't need a rewrite
                     llargument_tys.push(arg.layout.scalar_pair_element_llvm_type(cx, 0, true));
                     llargument_tys.push(arg.layout.scalar_pair_element_llvm_type(cx, 1, true));
                     continue;
