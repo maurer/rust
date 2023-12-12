@@ -480,6 +480,13 @@ pub const BUILTIN_ATTRIBUTES: &[BuiltinAttribute] = &[
         experimental!(cfi_encoding)
     ),
 
+    // FIXME RFC
+    // `#[patchable_function_entry(prefix(n), entry(n))]`
+    gated!(
+        patchable_function_entry, Normal, template!(List: "prefix(n), entry(n)"), ErrorPreceding,
+        experimental!(patchable_function_entry)
+    ),
+
     // ==========================================================================
     // Internal attributes: Stability, deprecation, and unsafe:
     // ==========================================================================

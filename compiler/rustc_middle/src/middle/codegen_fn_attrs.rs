@@ -43,6 +43,9 @@ pub struct CodegenFnAttrs {
     /// The `#[repr(align(...))]` attribute. Indicates the value of which the function should be
     /// aligned to.
     pub alignment: Option<u32>,
+    /// The `#[patchable_function_entry(...)]` attribute. Indicates how many nops should be around
+    /// the function entry.
+    pub patchable_function_entry: Option<PatchableFunctionEntry>,
 }
 
 #[derive(Copy, Clone, Debug, TyEncodable, TyDecodable, HashStable)]
@@ -146,6 +149,7 @@ impl CodegenFnAttrs {
             no_sanitize: SanitizerSet::empty(),
             instruction_set: None,
             alignment: None,
+            patchable_function_entry: None,
         }
     }
 

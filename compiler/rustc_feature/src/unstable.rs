@@ -548,6 +548,9 @@ declare_features! (
     (unstable, offset_of_enum, "1.75.0", Some(106655)),
     /// Allows using `#[optimize(X)]`.
     (unstable, optimize_attribute, "1.34.0", Some(54882)),
+    /// Allows specifying nop padding on functions for dynamic patching.
+    // FIXME this needs an RFC #
+    (unstable, patchable_function_entry, "CURRENT_RUSTC_VERSION", Some(9999)),
     /// Allows macro attributes on expressions, statements and non-inline modules.
     (unstable, proc_macro_hygiene, "1.30.0", Some(54727)),
     /// Allows `&raw const $place_expr` and `&raw mut $place_expr` expressions.
