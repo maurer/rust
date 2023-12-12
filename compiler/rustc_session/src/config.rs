@@ -3221,9 +3221,9 @@ pub(crate) mod dep_tracking {
         BranchProtection, CFGuard, CFProtection, CrateType, DebugInfo, DebugInfoCompression,
         ErrorOutputType, FunctionReturn, InliningThreshold, InstrumentCoverage, InstrumentXRay,
         LinkerPluginLto, LocationDetail, LtoCli, OomStrategy, OptLevel, OutFileName, OutputType,
-        OutputTypes, Polonius, RemapPathScopeComponents, ResolveDocLinks, SourceFileHashAlgorithm,
-        SplitDwarfKind, SwitchWithOptPath, SymbolManglingVersion, TraitSolver, TrimmedDefPaths,
-        WasiExecModel,
+        OutputTypes, PatchableFunctionEntry, Polonius, RemapPathScopeComponents, ResolveDocLinks,
+        SourceFileHashAlgorithm, SplitDwarfKind, SwitchWithOptPath, SymbolManglingVersion,
+        TraitSolver, TrimmedDefPaths, WasiExecModel,
     };
     use crate::lint;
     use crate::utils::NativeLib;
@@ -3327,6 +3327,7 @@ pub(crate) mod dep_tracking {
         OomStrategy,
         LanguageIdentifier,
         TraitSolver,
+        PatchableFunctionEntry,
         Polonius,
         InliningThreshold,
         FunctionReturn,
@@ -3481,6 +3482,32 @@ impl DumpMonoStatsFormat {
             Self::Markdown => "md",
             Self::Json => "json",
         }
+    }
+}
+
+/// `-Z patchable-function-entry` representation - how many nops to put before and after function
+/// entry.
+#[derive(Clone, Copy, PartialEq, Hash, Debug, Default)]
+pub struct PatchableFunctionEntry {
+    /// Nops before the entry
+    prefix: u8,
+    /// Nops after the entry
+    entry: u8,
+}
+
+impl PatchableFunctionEntry {
+    pub fn from_nop_count_and_offset(nop_count: u8, offset: u8) -> Option<PatchableFunctionEntry> {
+        if nop_count < offset {
+            None
+        } else {
+            Some(Self { prefix: offset, entry: nop_count - offset })
+        }
+    }
+    pub fn prefix(&self) -> u8 {
+        self.prefix
+    }
+    pub fn entry(&self) -> u8 {
+        self.entry
     }
 }
 

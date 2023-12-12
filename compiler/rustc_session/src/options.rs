@@ -376,6 +376,8 @@ mod desc {
     pub const parse_time_passes_format: &str = "`text` (default) or `json`";
     pub const parse_passes: &str = "a space-separated list of passes, or `all`";
     pub const parse_panic_strategy: &str = "either `unwind` or `abort`";
+    pub const parse_patchable_function_entry: &str =
+        "nop_count,entry_offset or nop_count (defaulting entry_offset=0)";
     pub const parse_opt_panic_strategy: &str = parse_panic_strategy;
     pub const parse_oom_strategy: &str = "either `panic` or `abort`";
     pub const parse_relro_level: &str = "one of: `full`, `partial`, or `off`";
@@ -689,6 +691,30 @@ mod parse {
             _ => return false,
         }
         true
+    }
+
+    pub(crate) fn parse_patchable_function_entry(
+        slot: &mut PatchableFunctionEntry,
+        v: Option<&str>,
+    ) -> bool {
+        let mut nop_count = 0;
+        let mut offset = 0;
+
+        if !parse_number(&mut nop_count, v) {
+            let parts = v.and_then(|v| v.split_once(',')).unzip();
+            if !parse_number(&mut nop_count, parts.0) {
+                return false;
+            }
+            if !parse_number(&mut offset, parts.1) {
+                return false;
+            }
+        }
+
+        if let Some(pfe) = PatchableFunctionEntry::from_nop_count_and_offset(nop_count, offset) {
+            *slot = pfe;
+            return true;
+        }
+        false
     }
 
     pub(crate) fn parse_oom_strategy(slot: &mut OomStrategy, v: Option<&str>) -> bool {
@@ -1758,6 +1784,8 @@ options! {
         "panic strategy for panics in drops"),
     parse_only: bool = (false, parse_bool, [UNTRACKED],
         "parse only; do not compile, assemble, or link (default: no)"),
+    patchable_function_entry: PatchableFunctionEntry = (PatchableFunctionEntry::default(), parse_patchable_function_entry, [TRACKED],
+        "nop padding at function entry"),
     plt: Option<bool> = (None, parse_opt_bool, [TRACKED],
         "whether to use the PLT when calling into shared libraries;
         only has effect for PIC code on systems with ELF binaries
