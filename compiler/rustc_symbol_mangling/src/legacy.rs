@@ -89,6 +89,17 @@ pub(super) fn mangle<'tcx>(
         _ => {}
     }
 
+    if let ty::InstanceDef::CfiShim { invoke_ty, .. } = instance.def {
+        let _ = printer.write_str("{{cfi-shim(");
+        let _ = printer.print_type(invoke_ty);
+        let _ = printer.write_str("}}");
+        //let _ = printer.path_generic_args(|printer| {
+        //    printer.write_str("{{cfi-shim(")?;
+        //    printer.print_type(invoke_ty)?;
+        //    printer.write_str(")}}")
+        //}, args);
+    }
+
     printer.path.finish(hash)
 }
 

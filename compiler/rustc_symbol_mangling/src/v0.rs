@@ -45,6 +45,8 @@ pub(super) fn mangle<'tcx>(
         ty::InstanceDef::ThreadLocalShim(_) => Some("tls"),
         ty::InstanceDef::VTableShim(_) => Some("vtable"),
         ty::InstanceDef::ReifyShim(_) => Some("reify"),
+        // FIXME THIS CAN COLLIDE! Need to figure out how to include invoke_ty
+        ty::InstanceDef::CfiShim { .. } => Some("cfi"),
 
         ty::InstanceDef::ConstructCoroutineInClosureShim { target_kind, .. }
         | ty::InstanceDef::CoroutineKindShim { target_kind, .. } => match target_kind {
