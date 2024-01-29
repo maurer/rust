@@ -1,7 +1,7 @@
 use crate::middle::codegen_fn_attrs::CodegenFnAttrFlags;
 use crate::ty::print::{FmtPrinter, Printer};
 use crate::ty::{self, Ty, TyCtxt, TypeFoldable, TypeSuperFoldable};
-use crate::ty::{EarlyBinder, GenericArgs, GenericArgsRef, TypeVisitableExt};
+use crate::ty::{EarlyBinder, GenericArgs, GenericArgsRef, Lift, TypeVisitableExt};
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir as hir;
 use rustc_hir::def::Namespace;
@@ -135,14 +135,62 @@ pub enum InstanceDef<'tcx> {
     ///
     /// The `DefId` is for `FnPtr::addr`, the `Ty` is the type `T`.
     FnPtrAddrShim(DefId, Ty<'tcx>),
+
+    /// Shim generated for the sake of CFI which replaces the receiver with the
+    /// provided type.
+    CfiShim { target_instance: &'tcx InstanceDef<'tcx>, invoke_ty: Ty<'tcx> },
 }
 
 impl<'tcx> Instance<'tcx> {
     /// Returns the `Ty` corresponding to this `Instance`, with generic substitutions applied and
     /// lifetimes erased, allowing a `ParamEnv` to be specified for use during normalization.
     pub fn ty(&self, tcx: TyCtxt<'tcx>, param_env: ty::ParamEnv<'tcx>) -> Ty<'tcx> {
-        let ty = tcx.type_of(self.def.def_id());
-        tcx.instantiate_and_normalize_erasing_regions(self.args, param_env, ty)
+        let ty = tcx.instantiate_and_normalize_erasing_regions(
+            self.args,
+            param_env,
+            tcx.type_of(self.def.def_id()),
+        );
+        if let InstanceDef::CfiShim { invoke_ty, .. } = self.def {
+            use rustc_target::spec::abi::Abi;
+
+            debug!("Rewriting CFI shim type {ty} using {invoke_ty}");
+            let base_sig = match ty.kind() {
+                ty::Closure(_, args) => args.as_closure().sig(),
+                _ => ty.fn_sig(tcx),
+            };
+            debug!("base_sig: {base_sig}");
+            let sig = base_sig.map_bound(|sig| {
+                // FIXME if this works, merge some of the logic
+                // FIXME This is a guesswork hack
+                if sig.abi == Abi::RustCall && sig.inputs().len() == 1 {
+                    // FIXME might be an unused branch now
+                    let receiver = Ty::new_ptr(
+                        tcx,
+                        ty::TypeAndMut { ty: invoke_ty, mutbl: ty::Mutability::Mut },
+                    );
+                    let inputs = std::iter::once(receiver)
+                        .chain(sig.inputs().into_iter().copied())
+                        .map(|ty| tcx.normalize_erasing_regions(param_env, ty));
+                    let output = tcx.normalize_erasing_regions(param_env, sig.output());
+                    tcx.mk_fn_sig(inputs, output, sig.c_variadic, sig.unsafety, sig.abi)
+                } else {
+                    let receiver = sig.inputs()[0].rewrite_receiver(tcx, invoke_ty);
+                    let inputs = std::iter::once(receiver)
+                        .chain(sig.inputs().into_iter().skip(1).copied())
+                        .map(|ty| tcx.normalize_erasing_regions(param_env, ty));
+                    let output = tcx.normalize_erasing_regions(param_env, sig.output());
+                    // This is repeated because our iterators are different types, so we can't just
+                    // assign back to an upper-scope `inputs`
+                    tcx.mk_fn_sig(inputs, output, sig.c_variadic, sig.unsafety, sig.abi)
+                }
+            });
+            debug!("transformed_sig: {sig}");
+            let ty = Ty::new_fn_ptr(tcx, sig);
+            debug!("Transformed to {ty}");
+            ty
+        } else {
+            ty
+        }
     }
 
     /// Finds a crate that contains a monomorphization of this instance that
@@ -198,6 +246,7 @@ impl<'tcx> InstanceDef<'tcx> {
             | InstanceDef::DropGlue(def_id, _)
             | InstanceDef::CloneShim(def_id, _)
             | InstanceDef::FnPtrAddrShim(def_id, _) => def_id,
+            InstanceDef::CfiShim { target_instance, .. } => target_instance.def_id(),
         }
     }
 
@@ -209,6 +258,7 @@ impl<'tcx> InstanceDef<'tcx> {
                 Some(def_id)
             }
             InstanceDef::VTableShim(..)
+            | InstanceDef::CfiShim { .. }
             | InstanceDef::ReifyShim(..)
             | InstanceDef::FnPtrShim(..)
             | InstanceDef::Virtual(..)
@@ -319,6 +369,9 @@ impl<'tcx> InstanceDef<'tcx> {
             | InstanceDef::ReifyShim(..)
             | InstanceDef::Virtual(..)
             | InstanceDef::VTableShim(..) => true,
+            InstanceDef::CfiShim { target_instance, .. } => {
+                target_instance.has_polymorphic_mir_body()
+            }
         }
     }
 }
@@ -356,6 +409,7 @@ fn fmt_instance(
         InstanceDef::DropGlue(_, Some(ty)) => write!(f, " - shim(Some({ty}))"),
         InstanceDef::CloneShim(_, ty) => write!(f, " - shim({ty})"),
         InstanceDef::FnPtrAddrShim(_, ty) => write!(f, " - shim({ty})"),
+        InstanceDef::CfiShim { invoke_ty, .. } => write!(f, " - cfi-shim({invoke_ty})"),
     }
 }
 
@@ -572,10 +626,41 @@ impl<'tcx> Instance<'tcx> {
         }
     }
 
+    // FIXME since there are few enouch callsites that provide invoke_ty, reduce
+    // noise here by going to those callsites and adding `.cfi_shim()` there instead
     pub fn resolve_drop_in_place(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> ty::Instance<'tcx> {
         let def_id = tcx.require_lang_item(LangItem::DropInPlace, None);
         let args = tcx.mk_args(&[ty.into()]);
         Instance::expect_resolve(tcx, ty::ParamEnv::reveal_all(), def_id, args)
+    }
+
+    pub fn cfi_shim(
+        mut self,
+        tcx: TyCtxt<'tcx>,
+        invoke_ty: Option<Ty<'tcx>>,
+    ) -> ty::Instance<'tcx> {
+        // FIXME suppressed shimming for closures
+        if tcx.is_closure_or_coroutine(self.def.def_id()) {
+            return self;
+        }
+        // FIXME do a final test run where shimming is forced on for everything
+        let cfi = tcx.sess.is_sanitizer_kcfi_enabled() || tcx.sess.is_sanitizer_cfi_enabled();
+        if let Some(invoke_ty) = invoke_ty
+            && cfi
+        {
+            self.def = InstanceDef::CfiShim {
+                target_instance: (&self.def).lift_to_tcx(tcx).expect("Could not lift for shimming"),
+                invoke_ty,
+            };
+        }
+        self
+    }
+
+    pub fn force_thin_self(&self) -> bool {
+        match self.def {
+            InstanceDef::Virtual(..) | InstanceDef::CfiShim { .. } => true,
+            _ => false,
+        }
     }
 
     #[instrument(level = "debug", skip(tcx), ret)]

@@ -381,7 +381,7 @@ fn collect_items_rec<'tcx>(
             debug_assert!(should_codegen_locally(tcx, &instance));
 
             let ty = instance.ty(tcx, ty::ParamEnv::reveal_all());
-            visit_drop_use(tcx, ty, true, starting_item.span, &mut used_items);
+            visit_drop_use(tcx, ty, None, true, starting_item.span, &mut used_items);
 
             recursion_depth_reset = None;
 
@@ -847,7 +847,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MirUsedCollector<'a, 'tcx> {
             mir::TerminatorKind::Drop { ref place, .. } => {
                 let ty = place.ty(self.body, self.tcx).ty;
                 let ty = self.monomorphize(ty);
-                visit_drop_use(self.tcx, ty, true, source, self.output);
+                visit_drop_use(self.tcx, ty, None, true, source, self.output);
             }
             mir::TerminatorKind::InlineAsm { ref operands, .. } => {
                 for op in operands {
@@ -909,12 +909,16 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MirUsedCollector<'a, 'tcx> {
 fn visit_drop_use<'tcx>(
     tcx: TyCtxt<'tcx>,
     ty: Ty<'tcx>,
+    invoke_ty: Option<Ty<'tcx>>,
     is_direct_call: bool,
     source: Span,
     output: &mut MonoItems<'tcx>,
 ) {
-    let instance = Instance::resolve_drop_in_place(tcx, ty);
+    let instance = Instance::resolve_drop_in_place(tcx, ty).cfi_shim(tcx, invoke_ty);
     visit_instance_use(tcx, instance, is_direct_call, source, output);
+    if invoke_ty.is_some() {
+        visit_drop_use(tcx, ty, None, true, source, output)
+    }
 }
 
 fn visit_fn_use<'tcx>(
@@ -988,7 +992,8 @@ fn visit_instance_use<'tcx>(
         | ty::InstanceDef::Item(..)
         | ty::InstanceDef::FnPtrShim(..)
         | ty::InstanceDef::CloneShim(..)
-        | ty::InstanceDef::FnPtrAddrShim(..) => {
+        | ty::InstanceDef::FnPtrAddrShim(..)
+        | ty::InstanceDef::CfiShim { .. } => {
             output.push(create_fn_mono_item(tcx, instance, source));
         }
     }
@@ -1174,9 +1179,20 @@ fn create_mono_items_for_vtable_methods<'tcx>(
     assert!(!trait_ty.has_escaping_bound_vars() && !impl_ty.has_escaping_bound_vars());
 
     if let ty::Dynamic(trait_ty, ..) = trait_ty.kind() {
-        if let Some(principal) = trait_ty.principal() {
+        // FIXME there's probably a simpler control flow for this
+        let invoke_ty = if let Some(principal) = trait_ty.principal() {
             let poly_trait_ref = principal.with_self_ty(tcx, impl_ty);
             assert!(!poly_trait_ref.has_escaping_bound_vars());
+
+            let pep: ty::PolyExistentialPredicate<'tcx> =
+                principal.map_bound(ty::ExistentialPredicate::Trait);
+            let existential_predicates = tcx.mk_poly_existential_predicates(&[pep]);
+            let invoke_ty = Some(Ty::new_dynamic(
+                tcx,
+                existential_predicates,
+                tcx.lifetimes.re_erased,
+                ty::Dyn,
+            ));
 
             // Walk all methods of the trait, including those of its supertraits
             let entries = tcx.vtable_entries(poly_trait_ref);
@@ -1192,15 +1208,22 @@ fn create_mono_items_for_vtable_methods<'tcx>(
                         None
                     }
                     VtblEntry::Method(instance) => {
-                        Some(*instance).filter(|instance| should_codegen_locally(tcx, instance))
+                        //Some(instance.cfi_shim(tcx, invoke_ty)).filter(|instance| should_codegen_locally(tcx, instance))
+                        Some(*instance)
+                            .filter(|instance| should_codegen_locally(tcx, instance))
+                            .map(|instance| instance.cfi_shim(tcx, invoke_ty))
                     }
                 })
                 .map(|item| create_fn_mono_item(tcx, item, source));
             output.extend(methods);
-        }
 
-        // Also add the destructor.
-        visit_drop_use(tcx, impl_ty, false, source, output);
+            invoke_ty
+        } else {
+            None
+        };
+
+        // Also add the destructor
+        visit_drop_use(tcx, impl_ty, invoke_ty, false, source, output);
     }
 }
 
@@ -1225,7 +1248,7 @@ impl<'v> RootCollector<'_, 'v> {
                     debug!("RootCollector: ADT drop-glue for `{id:?}`",);
 
                     let ty = self.tcx.type_of(id.owner_id.to_def_id()).no_bound_vars().unwrap();
-                    visit_drop_use(self.tcx, ty, true, DUMMY_SP, self.output);
+                    visit_drop_use(self.tcx, ty, None, true, DUMMY_SP, self.output);
                 }
             }
             DefKind::GlobalAsm => {

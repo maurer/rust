@@ -23,10 +23,37 @@ use rustc_middle::mir::patch::MirPatch;
 use rustc_mir_dataflow::elaborate_drops::{self, DropElaborator, DropFlagMode, DropStyle};
 
 pub fn provide(providers: &mut Providers) {
-    providers.mir_shims = make_shim;
+    providers.mir_shims = provide_make_shim;
+}
+fn provide_make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'tcx> {
+    make_shim(tcx, instance, false)
 }
 
-fn make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'tcx> {
+// FIXME this is a layering violation - this is replicating work that occurs when computing an ABI
+// It's not immediately obvious to me why this doesn't break for a VTableShim around an Arc<Self>,
+// does it just not happen?
+fn force_thin_self_ptr<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Ty<'tcx> {
+    use ty::layout::{LayoutCx, LayoutOf, MaybeResult, TyAndLayout};
+    let cx = LayoutCx { tcx, param_env: ty::ParamEnv::reveal_all() };
+    let mut receiver_layout: TyAndLayout<'_> =
+        cx.layout_of(ty).to_result().expect("unable to compute layout of receiver type");
+    // The VTableShim should have already done any `dyn Foo` -> `*const dyn Foo` coercions
+    assert!(!receiver_layout.is_unsized());
+    // If we aren't a pointer or a ref already, we better be a no-padding wrapper around one
+    while !receiver_layout.ty.is_unsafe_ptr() && !receiver_layout.ty.is_ref() {
+        receiver_layout = receiver_layout
+            .non_1zst_field(&cx)
+            .expect("not exactly one non-1-ZST field in a CFI shim receiver")
+            .1
+    }
+    receiver_layout.ty
+}
+
+fn make_shim<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    instance: ty::InstanceDef<'tcx>,
+    skip_passes: bool,
+) -> Body<'tcx> {
     debug!("make_shim({:?})", instance);
 
     let mut result = match instance {
@@ -45,6 +72,24 @@ fn make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'
             };
 
             build_call_shim(tcx, instance, Some(adjustment), CallKind::Indirect(ty))
+        }
+        ty::InstanceDef::CfiShim { target_instance, invoke_ty } => {
+            // FIXME check for an is_item predicate or use matches!?
+            let mut target_body = match target_instance {
+                // FIXME an adjustemnt of None might not work right in build_call
+                ty::InstanceDef::Item(..) => build_call_shim(
+                    tcx,
+                    *target_instance,
+                    Some(Adjustment::Identity),
+                    CallKind::Direct(target_instance.def_id()),
+                ),
+                _ => make_shim(tcx, *target_instance, true),
+            };
+            //FIXME add error reporting around invariant violations
+            let receiver_ty = &mut target_body.local_decls[Local::from_usize(1)].ty;
+            *receiver_ty = force_thin_self_ptr(tcx, receiver_ty.rewrite_receiver(tcx, invoke_ty));
+            target_body.source.instance = instance;
+            target_body
         }
         // We are generating a call back to our def-id, which the
         // codegen backend knows to turn to an actual call, be it
@@ -165,6 +210,11 @@ fn make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'
         }
     };
     debug!("make_shim({:?}) = untransformed {:?}", instance, result);
+
+    if skip_passes {
+        debug!("make_shim(skip_passes = true), returning");
+        return result;
+    }
 
     // We don't validate MIR here because the shims may generate code that's
     // only valid in a reveal-all param-env. However, since we do initial
@@ -721,17 +771,18 @@ fn build_call_shim<'tcx>(
     // `FnPtrShim` contains the fn pointer type that a call shim is being built for - this is used
     // to substitute into the signature of the shim. It is not necessary for users of this
     // MIR body to perform further substitutions (see `InstanceDef::has_polymorphic_mir_body`).
-    let (sig_args, untuple_args) = if let ty::InstanceDef::FnPtrShim(_, ty) = instance {
-        let sig = tcx.instantiate_bound_regions_with_erased(ty.fn_sig(tcx));
+    let (sig_args, untuple_args) = match instance {
+        ty::InstanceDef::FnPtrShim(_, ty) => {
+            let sig = tcx.instantiate_bound_regions_with_erased(ty.fn_sig(tcx));
 
-        let untuple_args = sig.inputs();
+            let untuple_args = sig.inputs();
 
-        // Create substitutions for the `Self` and `Args` generic parameters of the shim body.
-        let arg_tup = Ty::new_tup(tcx, untuple_args);
+            // Create substitutions for the `Self` and `Args` generic parameters of the shim body.
+            let arg_tup = Ty::new_tup(tcx, untuple_args);
 
-        (Some([ty.into(), arg_tup.into()]), Some(untuple_args))
-    } else {
-        (None, None)
+            (Some(tcx.mk_args(&[ty.into(), arg_tup.into()])), Some(untuple_args))
+        }
+        _ => (None, None),
     };
 
     let def_id = instance.def_id();
@@ -783,6 +834,14 @@ fn build_call_shim<'tcx>(
         sig.inputs_and_output = tcx.mk_type_list(&inputs_and_output);
     }
 
+    // FIXME as above, this logic is also in `Instance::ty`
+    if let ty::InstanceDef::CfiShim { invoke_ty, .. } = instance {
+        // Modify fn(&self) to fn(&dyn Trait)
+        let mut inputs_and_output = sig.inputs_and_output.to_vec();
+        inputs_and_output[0] = inputs_and_output[0].rewrite_receiver(tcx, invoke_ty);
+        sig.inputs_and_output = tcx.mk_type_list(&inputs_and_output);
+    }
+
     let span = tcx.def_span(def_id);
 
     debug!(?sig);
@@ -790,37 +849,70 @@ fn build_call_shim<'tcx>(
     let mut local_decls = local_decls_for_sig(&sig, span);
     let source_info = SourceInfo::outermost(span);
 
-    let rcvr_place = || {
-        assert!(rcvr_adjustment.is_some());
-        Place::from(Local::new(1 + 0))
-    };
     let mut statements = vec![];
 
-    let rcvr = rcvr_adjustment.map(|rcvr_adjustment| match rcvr_adjustment {
-        Adjustment::Identity => Operand::Move(rcvr_place()),
-        Adjustment::Deref { source: _ } => Operand::Move(tcx.mk_place_deref(rcvr_place())),
-        Adjustment::RefMut => {
-            // let rcvr = &mut rcvr;
-            let ref_rcvr = local_decls.push(
-                LocalDecl::new(
-                    Ty::new_ref(
-                        tcx,
-                        tcx.lifetimes.re_erased,
-                        ty::TypeAndMut { ty: sig.inputs()[0], mutbl: hir::Mutability::Mut },
-                    ),
-                    span,
-                )
-                .immutable(),
-            );
-            let borrow_kind = BorrowKind::Mut { kind: MutBorrowKind::Default };
+    let mut rcvr_local = Local::new(1 + 0);
+
+    // FIXME rework this relative to rcvr_place()
+    if rcvr_adjustment.is_some() {
+        let orig_rcvr_ty = sig.inputs()[0];
+        assert_eq!(local_decls[rcvr_local].ty, orig_rcvr_ty);
+        // If this explodes, try checking that it's sized too?
+        // FIXME make generation shim conditional?
+        let param_env = tcx.param_env_reveal_all_normalized(instance.def_id());
+        if tcx
+            .try_normalize_erasing_regions(param_env, orig_rcvr_ty)
+            .map(|ty| ty.is_sized(tcx, param_env))
+            .unwrap_or(false)
+        {
+            let new_rcvr_local = local_decls.push(LocalDecl::new(orig_rcvr_ty, span).immutable());
             statements.push(Statement {
                 source_info,
                 kind: StatementKind::Assign(Box::new((
-                    Place::from(ref_rcvr),
-                    Rvalue::Ref(tcx.lifetimes.re_erased, borrow_kind, rcvr_place()),
+                    Place::from(new_rcvr_local),
+                    Rvalue::Cast(
+                        CastKind::Transmute,
+                        Operand::Move(Place::from(rcvr_local)),
+                        orig_rcvr_ty,
+                    ),
                 ))),
             });
-            Operand::Move(Place::from(ref_rcvr))
+            rcvr_local = new_rcvr_local
+        }
+    }
+
+    let rcvr_place = || {
+        assert!(rcvr_adjustment.is_some());
+        Place::from(rcvr_local)
+    };
+
+    let rcvr = rcvr_adjustment.map(|rcvr_adjustment| {
+        match rcvr_adjustment {
+            Adjustment::Identity => Operand::Move(rcvr_place()),
+            Adjustment::Deref { source: _ } => Operand::Move(tcx.mk_place_deref(rcvr_place())),
+            Adjustment::RefMut => {
+                // let rcvr = &mut rcvr;
+                let ref_rcvr = local_decls.push(
+                    LocalDecl::new(
+                        Ty::new_ref(
+                            tcx,
+                            tcx.lifetimes.re_erased,
+                            ty::TypeAndMut { ty: sig.inputs()[0], mutbl: hir::Mutability::Mut },
+                        ),
+                        span,
+                    )
+                    .immutable(),
+                );
+                let borrow_kind = BorrowKind::Mut { kind: MutBorrowKind::Default };
+                statements.push(Statement {
+                    source_info,
+                    kind: StatementKind::Assign(Box::new((
+                        Place::from(ref_rcvr),
+                        Rvalue::Ref(tcx.lifetimes.re_erased, borrow_kind, rcvr_place()),
+                    ))),
+                });
+                Operand::Move(Place::from(ref_rcvr))
+            }
         }
     });
 

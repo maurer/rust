@@ -304,6 +304,7 @@ fn fn_sig_for_fn_abi<'tcx>(
             };
             ty::Binder::bind_with_vars(fn_sig, bound_vars)
         }
+        ty::FnPtr(sig) => sig,
         _ => bug!("unexpected type {:?} in Instance::fn_sig", ty),
     }
 }
@@ -373,7 +374,7 @@ fn fn_abi_of_instance<'tcx>(
         extra_args,
         caller_location,
         Some(instance.def_id()),
-        matches!(instance.def, ty::InstanceDef::Virtual(..)),
+        instance.force_thin_self(),
     )
 }
 
