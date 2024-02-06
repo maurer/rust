@@ -64,7 +64,7 @@ impl<'tcx> MonoItem<'tcx> {
                 match instance.def {
                     // "Normal" functions size estimate: the number of
                     // statements, plus one for the terminator.
-                    InstanceDef::Item(..) | InstanceDef::DropGlue(..) => {
+                    InstanceDef::Item(..) | InstanceDef::DropGlue { .. } => {
                         let mir = tcx.instance_mir(instance.def);
                         mir.basic_blocks.iter().map(|bb| bb.statements.len() + 1).sum()
                     }
@@ -404,7 +404,7 @@ impl<'tcx> CodegenUnit<'tcx> {
                             | InstanceDef::ClosureOnceShim { .. }
                             | InstanceDef::ConstructCoroutineInClosureShim { .. }
                             | InstanceDef::CoroutineKindShim { .. }
-                            | InstanceDef::DropGlue(..)
+                            | InstanceDef::DropGlue { .. }
                             | InstanceDef::CloneShim(..)
                             | InstanceDef::ThreadLocalShim(..)
                             | InstanceDef::FnPtrAddrShim(..) => None,

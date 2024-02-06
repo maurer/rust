@@ -802,7 +802,7 @@ impl<'tcx> Stable<'tcx> for ty::Instance<'tcx> {
             | ty::InstanceDef::ConstructCoroutineInClosureShim { .. }
             | ty::InstanceDef::CoroutineKindShim { .. }
             | ty::InstanceDef::ThreadLocalShim(..)
-            | ty::InstanceDef::DropGlue(..)
+            | ty::InstanceDef::DropGlue { .. }
             | ty::InstanceDef::CloneShim(..)
             | ty::InstanceDef::FnPtrShim(..) => stable_mir::mir::mono::InstanceKind::Shim,
         };

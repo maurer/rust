@@ -623,7 +623,7 @@ fn characteristic_def_id_of_mono_item<'tcx>(
                 | ty::InstanceDef::ConstructCoroutineInClosureShim { .. }
                 | ty::InstanceDef::CoroutineKindShim { .. }
                 | ty::InstanceDef::Intrinsic(..)
-                | ty::InstanceDef::DropGlue(..)
+                | ty::InstanceDef::DropGlue { .. }
                 | ty::InstanceDef::Virtual(..)
                 | ty::InstanceDef::CloneShim(..)
                 | ty::InstanceDef::ThreadLocalShim(..)
@@ -771,7 +771,8 @@ fn mono_item_visibility<'tcx>(
     };
 
     let def_id = match instance.def {
-        InstanceDef::Item(def_id) | InstanceDef::DropGlue(def_id, Some(_)) => def_id,
+        InstanceDef::Item(def_id)
+        | InstanceDef::DropGlue { drop_in_place: def_id, drop_ty: Some(_), .. } => def_id,
 
         // We match the visibility of statics here
         InstanceDef::ThreadLocalShim(def_id) => {
@@ -787,7 +788,7 @@ fn mono_item_visibility<'tcx>(
         | InstanceDef::ClosureOnceShim { .. }
         | InstanceDef::ConstructCoroutineInClosureShim { .. }
         | InstanceDef::CoroutineKindShim { .. }
-        | InstanceDef::DropGlue(..)
+        | InstanceDef::DropGlue { .. }
         | InstanceDef::CloneShim(..)
         | InstanceDef::FnPtrAddrShim(..) => return Visibility::Hidden,
     };

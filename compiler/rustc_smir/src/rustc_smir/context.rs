@@ -400,7 +400,7 @@ impl<'tcx> Context for TablesWrapper<'tcx> {
     fn is_empty_drop_shim(&self, def: InstanceDef) -> bool {
         let tables = self.0.borrow_mut();
         let instance = tables.instances[def];
-        matches!(instance.def, ty::InstanceDef::DropGlue(_, None))
+        matches!(instance.def, ty::InstanceDef::DropGlue { drop_ty: None, .. })
     }
 
     fn mono_instance(&self, def_id: stable_mir::DefId) -> stable_mir::mir::mono::Instance {

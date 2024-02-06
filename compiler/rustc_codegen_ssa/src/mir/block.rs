@@ -454,7 +454,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
         let ty = self.monomorphize(ty);
         let drop_fn = Instance::resolve_drop_in_place(bx.tcx(), ty);
 
-        if let ty::InstanceDef::DropGlue(_, None) = drop_fn.def {
+        if let ty::InstanceDef::DropGlue { drop_ty: None, .. } = drop_fn.def {
             // we don't actually need to drop anything.
             return helper.funclet_br(self, bx, target, mergeable_succ);
         }
@@ -773,7 +773,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
         };
         let def = instance.map(|i| i.def);
 
-        if let Some(ty::InstanceDef::DropGlue(_, None)) = def {
+        if let Some(ty::InstanceDef::DropGlue { drop_ty: None, .. }) = def {
             // Empty drop glue; a no-op.
             let target = target.unwrap();
             return helper.funclet_br(self, bx, target, mergeable_succ);

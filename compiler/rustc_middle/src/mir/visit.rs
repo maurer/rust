@@ -347,14 +347,20 @@ macro_rules! make_mir_visitor {
                         ty::InstanceDef::ClosureOnceShim { call_once: _def_id, track_caller: _ } |
                         ty::InstanceDef::ConstructCoroutineInClosureShim { coroutine_closure_def_id: _def_id, target_kind: _ } |
                         ty::InstanceDef::CoroutineKindShim { coroutine_def_id: _def_id, target_kind: _ } |
-                        ty::InstanceDef::DropGlue(_def_id, None) => {}
 
                         ty::InstanceDef::FnPtrShim(_def_id, ty) |
-                        ty::InstanceDef::DropGlue(_def_id, Some(ty)) |
                         ty::InstanceDef::CloneShim(_def_id, ty) |
                         ty::InstanceDef::FnPtrAddrShim(_def_id, ty) => {
                             // FIXME(eddyb) use a better `TyContext` here.
                             self.visit_ty($(& $mutability)? *ty, TyContext::Location(location));
+                        }
+                        ty::InstanceDef::DropGlue {drop_ty, invoke_ty, drop_in_place: _def_id} => {
+                            if let Some(ty) = drop_ty {
+                                self.visit_ty($(& $mutability)? *ty, TyContext::Location(location));
+                            }
+                            if let Some(ty) = invoke_ty {
+                                self.visit_ty($(& $mutability)? *ty, TyContext::Location(location));
+                            }
                         }
                     }
                     self.visit_args(callee_args, location);

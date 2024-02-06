@@ -175,7 +175,7 @@ impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> InterpCx<'mir, 'tcx, M> {
                 let ty = place.ty(&frame.body.local_decls, *self.tcx).ty;
                 let ty = self.subst_from_frame_and_normalize_erasing_regions(frame, ty)?;
                 let instance = Instance::resolve_drop_in_place(*self.tcx, ty);
-                if let ty::InstanceDef::DropGlue(_, None) = instance.def {
+                if let ty::InstanceDef::DropGlue { drop_ty: None, .. } = instance.def {
                     // This is the branch we enter if and only if the dropped type has no drop glue
                     // whatsoever. This can happen as a result of monomorphizing a drop of a
                     // generic. In order to make sure that generic and non-generic code behaves
@@ -543,7 +543,7 @@ impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> InterpCx<'mir, 'tcx, M> {
             | ty::InstanceDef::ConstructCoroutineInClosureShim { .. }
             | ty::InstanceDef::CoroutineKindShim { .. }
             | ty::InstanceDef::FnPtrShim(..)
-            | ty::InstanceDef::DropGlue(..)
+            | ty::InstanceDef::DropGlue { .. }
             | ty::InstanceDef::CloneShim(..)
             | ty::InstanceDef::FnPtrAddrShim(..)
             | ty::InstanceDef::ThreadLocalShim(..)

@@ -100,7 +100,7 @@ fn make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'
             }
         },
 
-        ty::InstanceDef::DropGlue(def_id, ty) => {
+        ty::InstanceDef::DropGlue { drop_in_place: def_id, drop_ty: ty, .. } => {
             // FIXME(#91576): Drop shims for coroutines aren't subject to the MIR passes at the end
             // of this function. Is this intentional?
             if let Some(ty::Coroutine(coroutine_def_id, args)) = ty.map(Ty::kind) {
@@ -263,7 +263,12 @@ fn build_drop_shim<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId, ty: Option<Ty<'tcx>>)
     block(&mut blocks, TerminatorKind::Goto { target: return_block });
     block(&mut blocks, TerminatorKind::Return);
 
-    let source = MirSource::from_instance(ty::InstanceDef::DropGlue(def_id, ty));
+    //FIXME do we ever want a replaced ty here?
+    let source = MirSource::from_instance(ty::InstanceDef::DropGlue {
+        drop_in_place: def_id,
+        drop_ty: ty,
+        invoke_ty: None,
+    });
     let mut body =
         new_body(source, blocks, local_decls_for_sig(&sig, span), sig.inputs().len(), span);
 

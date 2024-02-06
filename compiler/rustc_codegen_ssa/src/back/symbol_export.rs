@@ -348,7 +348,11 @@ fn exported_symbols_provider_local(
                         ));
                     }
                 }
-                MonoItem::Fn(Instance { def: InstanceDef::DropGlue(def_id, Some(ty)), args }) => {
+                MonoItem::Fn(Instance {
+                    def: InstanceDef::DropGlue { drop_in_place: def_id, drop_ty: Some(ty), .. },
+                    args,
+                }) => {
+                    //FIXME do we need to do something for replaced types here for dylibs?
                     // A little sanity-check
                     debug_assert_eq!(
                         args.non_erasable_generics(tcx, def_id).next(),

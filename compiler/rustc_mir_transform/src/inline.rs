@@ -319,7 +319,7 @@ impl<'tcx> Inliner<'tcx> {
             | InstanceDef::ClosureOnceShim { .. }
             | InstanceDef::ConstructCoroutineInClosureShim { .. }
             | InstanceDef::CoroutineKindShim { .. }
-            | InstanceDef::DropGlue(..)
+            | InstanceDef::DropGlue { .. }
             | InstanceDef::CloneShim(..)
             | InstanceDef::ThreadLocalShim(..)
             | InstanceDef::FnPtrAddrShim(..) => return Ok(()),
@@ -1027,7 +1027,7 @@ fn try_instance_mir<'tcx>(
     tcx: TyCtxt<'tcx>,
     instance: InstanceDef<'tcx>,
 ) -> Result<&'tcx Body<'tcx>, &'static str> {
-    if let ty::InstanceDef::DropGlue(_, Some(ty)) = instance
+    if let ty::InstanceDef::DropGlue { drop_ty: Some(ty), .. } = instance
         && let ty::Adt(def, args) = ty.kind()
     {
         let fields = def.all_fields();

@@ -117,9 +117,12 @@ pub enum InstanceDef<'tcx> {
     /// `core::ptr::drop_in_place::<T>`.
     ///
     /// The `DefId` is for `core::ptr::drop_in_place`.
+    /// FIXME better names than drop_ty and invoke_ty
+    /// FIXME document if it works
     /// The `Option<Ty<'tcx>>` is either `Some(T)`, or `None` for empty drop
     /// glue.
-    DropGlue(DefId, Option<Ty<'tcx>>),
+    ///
+    DropGlue { drop_in_place: DefId, drop_ty: Option<Ty<'tcx>>, invoke_ty: Option<Ty<'tcx>> },
 
     /// Compiler-generated `<T as Clone>::clone` implementation.
     ///
@@ -172,7 +175,7 @@ impl<'tcx> Instance<'tcx> {
             InstanceDef::Item(def) => tcx
                 .upstream_monomorphizations_for(def)
                 .and_then(|monos| monos.get(&self.args).cloned()),
-            InstanceDef::DropGlue(_, Some(_)) => tcx.upstream_drop_glue_for(self.args),
+            InstanceDef::DropGlue { drop_ty: Some(_), .. } => tcx.upstream_drop_glue_for(self.args),
             _ => None,
         }
     }
@@ -195,7 +198,7 @@ impl<'tcx> InstanceDef<'tcx> {
                 target_kind: _,
             }
             | ty::InstanceDef::CoroutineKindShim { coroutine_def_id: def_id, target_kind: _ }
-            | InstanceDef::DropGlue(def_id, _)
+            | InstanceDef::DropGlue { drop_in_place: def_id, .. }
             | InstanceDef::CloneShim(def_id, _)
             | InstanceDef::FnPtrAddrShim(def_id, _) => def_id,
         }
@@ -205,9 +208,8 @@ impl<'tcx> InstanceDef<'tcx> {
     pub fn def_id_if_not_guaranteed_local_codegen(self) -> Option<DefId> {
         match self {
             ty::InstanceDef::Item(def) => Some(def),
-            ty::InstanceDef::DropGlue(def_id, Some(_)) | InstanceDef::ThreadLocalShim(def_id) => {
-                Some(def_id)
-            }
+            ty::InstanceDef::DropGlue { drop_in_place: def_id, drop_ty: Some(_), .. }
+            | InstanceDef::ThreadLocalShim(def_id) => Some(def_id),
             InstanceDef::VTableShim(..)
             | InstanceDef::ReifyShim(..)
             | InstanceDef::FnPtrShim(..)
@@ -216,7 +218,7 @@ impl<'tcx> InstanceDef<'tcx> {
             | InstanceDef::ClosureOnceShim { .. }
             | ty::InstanceDef::ConstructCoroutineInClosureShim { .. }
             | ty::InstanceDef::CoroutineKindShim { .. }
-            | InstanceDef::DropGlue(..)
+            | InstanceDef::DropGlue { .. }
             | InstanceDef::CloneShim(..)
             | InstanceDef::FnPtrAddrShim(..) => None,
         }
@@ -240,7 +242,7 @@ impl<'tcx> InstanceDef<'tcx> {
         use rustc_hir::definitions::DefPathData;
         let def_id = match *self {
             ty::InstanceDef::Item(def) => def,
-            ty::InstanceDef::DropGlue(_, Some(_)) => return false,
+            ty::InstanceDef::DropGlue { drop_ty: Some(_), .. } => return false,
             ty::InstanceDef::ThreadLocalShim(_) => return false,
             _ => return true,
         };
@@ -261,7 +263,7 @@ impl<'tcx> InstanceDef<'tcx> {
         if self.requires_inline(tcx) {
             return true;
         }
-        if let ty::InstanceDef::DropGlue(.., Some(ty)) = *self {
+        if let ty::InstanceDef::DropGlue { drop_ty: Some(ty), .. } = *self {
             // Drop glue generally wants to be instantiated at every codegen
             // unit, but without an #[inline] hint. We should make this
             // available to normal end-users.
@@ -309,11 +311,11 @@ impl<'tcx> InstanceDef<'tcx> {
             | InstanceDef::ThreadLocalShim(..)
             | InstanceDef::FnPtrAddrShim(..)
             | InstanceDef::FnPtrShim(..)
-            | InstanceDef::DropGlue(_, Some(_)) => false,
+            | InstanceDef::DropGlue { drop_ty: Some(_), .. } => false,
             InstanceDef::ClosureOnceShim { .. }
             | InstanceDef::ConstructCoroutineInClosureShim { .. }
             | InstanceDef::CoroutineKindShim { .. }
-            | InstanceDef::DropGlue(..)
+            | InstanceDef::DropGlue { .. }
             | InstanceDef::Item(_)
             | InstanceDef::Intrinsic(..)
             | InstanceDef::ReifyShim(..)
@@ -352,8 +354,18 @@ fn fmt_instance(
         InstanceDef::ClosureOnceShim { .. } => write!(f, " - shim"),
         InstanceDef::ConstructCoroutineInClosureShim { .. } => write!(f, " - shim"),
         InstanceDef::CoroutineKindShim { .. } => write!(f, " - shim"),
-        InstanceDef::DropGlue(_, None) => write!(f, " - shim(None)"),
-        InstanceDef::DropGlue(_, Some(ty)) => write!(f, " - shim(Some({ty}))"),
+        InstanceDef::DropGlue { drop_ty: None, invoke_ty: None, .. } => {
+            write!(f, " - shim(None)")
+        }
+        InstanceDef::DropGlue { drop_ty: Some(ty), invoke_ty: None, .. } => {
+            write!(f, " - shim(Some({ty}))")
+        }
+        InstanceDef::DropGlue { drop_ty: Some(ty), invoke_ty: Some(ty2), .. } => {
+            write!(f, " - shim(Some({ty} -> {ty2}))")
+        }
+        InstanceDef::DropGlue { drop_ty: None, invoke_ty: Some(ty), .. } => {
+            write!(f, " - shim(Some(? -> {ty}))")
+        }
         InstanceDef::CloneShim(_, ty) => write!(f, " - shim({ty})"),
         InstanceDef::FnPtrAddrShim(_, ty) => write!(f, " - shim({ty})"),
     }

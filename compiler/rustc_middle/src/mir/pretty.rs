@@ -174,7 +174,8 @@ fn dump_path<'tcx>(
     // All drop shims have the same DefId, so we have to add the type
     // to get unique file names.
     let shim_disambiguator = match source.instance {
-        ty::InstanceDef::DropGlue(_, Some(ty)) => {
+        ty::InstanceDef::DropGlue { drop_ty: Some(ty), .. } => {
+            // FIXME dump `invoke_ty` into the shim_disambiguator
             // Unfortunately, pretty-printed typed are not very filename-friendly.
             // We dome some filtering.
             let mut s = ".".to_owned();

@@ -49,10 +49,15 @@ fn resolve_instance<'tcx>(
                     _ => return Ok(None),
                 }
 
-                ty::InstanceDef::DropGlue(def_id, Some(ty))
+                // FIXME this is where we inject invoke_ty
+                ty::InstanceDef::DropGlue {
+                    drop_in_place: def_id,
+                    drop_ty: Some(ty),
+                    invoke_ty: None,
+                }
             } else {
                 debug!(" => trivial drop glue");
-                ty::InstanceDef::DropGlue(def_id, None)
+                ty::InstanceDef::DropGlue { drop_in_place: def_id, drop_ty: None, invoke_ty: None }
             }
         } else {
             debug!(" => free item");
