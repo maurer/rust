@@ -447,9 +447,11 @@ pub fn pretty_ty(ty: TyKind) -> String {
             RigidTy::Dynamic(data, region, repr) => {
                 // FIXME: Fix binder printing, it looks ugly now
                 pretty.push_str("(");
+                // FIXME either unify this with the .repr_name thing or remove receiver
                 match repr {
                     DynKind::Dyn => pretty.push_str("dyn "),
                     DynKind::DynStar => pretty.push_str("dyn* "),
+                    DynKind::Receiver => pretty.push_str("dyn*.0 "),
                 }
                 pretty.push_str(format!("{:#?}", data).as_str());
                 pretty.push_str(format!(" +  {:#?} )", region).as_str());

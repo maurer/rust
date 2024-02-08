@@ -138,6 +138,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             | ty::Adt(..)
             | ty::Never
             | ty::Dynamic(_, _, ty::DynStar)
+            | ty::Dynamic(_, _, ty::Receiver)
             | ty::Error(_) => {
                 let reported = self
                     .dcx()

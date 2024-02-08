@@ -86,6 +86,20 @@ pub enum DynKind {
     /// vtable of `impl T for Trait`. This allows a `dyn*` object to be treated agnostically with
     /// respect to whether it points to a `Box<T>`, `Rc<T>`, etc.
     DynStar,
+    /// Left half of a `dyn* Trait` object, pronounced `dyn*.0 Trait`. Never intended to be
+    /// language accessible, only exists for describing CFI types. Will document further if this
+    /// works.
+    Receiver,
+}
+
+impl DynKind {
+    pub fn repr_name(self) -> &'static str {
+        match self {
+            DynKind::Dyn => "dyn",
+            DynKind::DynStar => "dyn*",
+            DynKind::Receiver => "dyn*.0",
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -432,12 +446,9 @@ impl<I: Interner> DebugWithInfcx<I> for TyKind<I> {
             },
             FnDef(d, s) => f.debug_tuple("FnDef").field(d).field(&this.wrap(s)).finish(),
             FnPtr(s) => write!(f, "{:?}", &this.wrap(s)),
-            Dynamic(p, r, repr) => match repr {
-                DynKind::Dyn => write!(f, "dyn {:?} + {:?}", &this.wrap(p), &this.wrap(r)),
-                DynKind::DynStar => {
-                    write!(f, "dyn* {:?} + {:?}", &this.wrap(p), &this.wrap(r))
-                }
-            },
+            Dynamic(p, r, repr) => {
+                write!(f, "{} {:?} + {:?}", repr.repr_name(), &this.wrap(p), &this.wrap(r))
+            }
             Closure(d, s) => f.debug_tuple("Closure").field(d).field(&this.wrap(s)).finish(),
             CoroutineClosure(d, s) => {
                 f.debug_tuple("CoroutineClosure").field(d).field(&this.wrap(s)).finish()
