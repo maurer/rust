@@ -584,9 +584,16 @@ impl<'tcx> Instance<'tcx> {
         }
     }
 
-    pub fn resolve_drop_in_place(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> ty::Instance<'tcx> {
+    pub fn resolve_drop_in_place(
+        tcx: TyCtxt<'tcx>,
+        drop_ty: Ty<'tcx>,
+        invoke_ty: Option<Ty<'tcx>>,
+    ) -> ty::Instance<'tcx> {
         let def_id = tcx.require_lang_item(LangItem::DropInPlace, None);
-        let args = tcx.mk_args(&[ty.into()]);
+        let args = match invoke_ty {
+            Some(invoke_ty) => tcx.mk_args(&[drop_ty.into(), invoke_ty.into()]),
+            None => tcx.mk_args(&[drop_ty.into()]),
+        };
         Instance::expect_resolve(tcx, ty::ParamEnv::reveal_all(), def_id, args)
     }
 

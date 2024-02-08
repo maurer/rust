@@ -580,7 +580,7 @@ pub(crate) fn codegen_drop<'tcx>(
     drop_place: CPlace<'tcx>,
 ) {
     let ty = drop_place.layout().ty;
-    let drop_instance = Instance::resolve_drop_in_place(fx.tcx, ty).polymorphize(fx.tcx);
+    let drop_instance = Instance::resolve_drop_in_place(fx.tcx, ty, None).polymorphize(fx.tcx);
 
     if let ty::InstanceDef::DropGlue { drop_ty: None, .. } = drop_instance.def {
         // we don't actually need to drop anything

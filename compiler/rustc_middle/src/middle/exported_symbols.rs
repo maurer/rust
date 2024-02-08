@@ -57,7 +57,9 @@ impl<'tcx> ExportedSymbol<'tcx> {
                 tcx.symbol_name(ty::Instance::new(def_id, args))
             }
             ExportedSymbol::DropGlue(ty) => {
-                tcx.symbol_name(ty::Instance::resolve_drop_in_place(tcx, ty))
+                // FIXME unless we expand ExportedSymbol::DropGlue, we need to double check that
+                // Instance::DropGlue doesn't try to export non-None variants
+                tcx.symbol_name(ty::Instance::resolve_drop_in_place(tcx, ty, None))
             }
             ExportedSymbol::ThreadLocalShim(def_id) => tcx.symbol_name(ty::Instance {
                 def: ty::InstanceDef::ThreadLocalShim(def_id),

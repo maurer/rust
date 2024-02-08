@@ -16,7 +16,7 @@ fn resolve_instance<'tcx>(
     tcx: TyCtxt<'tcx>,
     key: ty::ParamEnvAnd<'tcx, (DefId, GenericArgsRef<'tcx>)>,
 ) -> Result<Option<Instance<'tcx>>, ErrorGuaranteed> {
-    let (param_env, (def_id, args)) = key.into_parts();
+    let (param_env, (def_id, mut args)) = key.into_parts();
 
     let result = if let Some(trait_def_id) = tcx.trait_of_item(def_id) {
         debug!(" => associated item, attempting to find impl in param_env {:#?}", param_env);
@@ -32,11 +32,11 @@ fn resolve_instance<'tcx>(
             debug!(" => intrinsic");
             ty::InstanceDef::Intrinsic(def_id)
         } else if Some(def_id) == tcx.lang_items().drop_in_place_fn() {
-            let ty = args.type_at(0);
+            let drop_ty = args.type_at(0);
 
-            if ty.needs_drop(tcx, param_env) {
+            if drop_ty.needs_drop(tcx, param_env) {
                 debug!(" => nontrivial drop glue");
-                match *ty.kind() {
+                match *drop_ty.kind() {
                     ty::Closure(..)
                     | ty::CoroutineClosure(..)
                     | ty::Coroutine(..)
@@ -49,11 +49,15 @@ fn resolve_instance<'tcx>(
                     _ => return Ok(None),
                 }
 
-                // FIXME this is where we inject invoke_ty
+                let invoke_ty = if args.len() >= 2 { Some(args.type_at(1)) } else { None };
+                // FIXME unclear if this will break other things - we might need these to be
+                // different functions?
+                args = tcx.mk_args(&[drop_ty.into()]);
+
                 ty::InstanceDef::DropGlue {
                     drop_in_place: def_id,
-                    drop_ty: Some(ty),
-                    invoke_ty: None,
+                    drop_ty: Some(drop_ty),
+                    invoke_ty,
                 }
             } else {
                 debug!(" => trivial drop glue");

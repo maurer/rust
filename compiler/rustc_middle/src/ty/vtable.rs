@@ -79,11 +79,36 @@ pub(super) fn vtable_allocation_provider<'tcx>(
     // allocation is correctly aligned as we created it above. Also we're only offsetting by
     // multiples of `ptr_align`, which means that it will stay aligned to `ptr_align`.
 
+    //FIXME: This type is wrong. This represents the left half of `&dyn Foo` as `&dyn Foo`.
+    //FIXME: I should be passing in `dyn Foo` or `Foo`, *not* `&mut dyn Foo` to allow `invoke_ty`
+    //to generalize to alternate receivers when we get to methods. Perhaps this should be done via
+    //a new ExistentialPredicate?
+    let mut invoke_ty = poly_trait_ref.map(|poly_trait_ref| {
+        let pep: ty::PolyExistentialPredicate<'tcx> =
+            poly_trait_ref.map_bound(ty::ExistentialPredicate::Trait);
+        let existential_predicates = tcx.mk_poly_existential_predicates(&[pep]);
+        Ty::new_dynamic(tcx, existential_predicates, tcx.lifetimes.re_erased, ty::Dyn)
+    });
+
+    ty::print::with_no_trimmed_paths!({
+        // FIXME remove this is stability for debugging
+        if let Some(name) = poly_trait_ref.map(|x| x.to_string()) {
+            if name.contains("Throngler") {
+                debug!("triggering CFI rewrite path for {name}");
+            } else {
+                invoke_ty = None;
+            }
+        } else {
+            invoke_ty = None;
+        }
+    });
+
     for (idx, entry) in vtable_entries.iter().enumerate() {
         let idx: u64 = u64::try_from(idx).unwrap();
         let scalar = match entry {
             VtblEntry::MetadataDropInPlace => {
-                let instance = ty::Instance::resolve_drop_in_place(tcx, ty);
+                // FIXME this is where we build the drop-in-place type
+                let instance = ty::Instance::resolve_drop_in_place(tcx, ty, invoke_ty);
                 let fn_alloc_id = tcx.reserve_and_set_fn_alloc(instance);
                 let fn_ptr = Pointer::from(fn_alloc_id);
                 Scalar::from_pointer(fn_ptr, &tcx)

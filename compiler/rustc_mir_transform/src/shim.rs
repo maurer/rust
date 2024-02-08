@@ -100,7 +100,7 @@ fn make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'
             }
         },
 
-        ty::InstanceDef::DropGlue { drop_in_place: def_id, drop_ty: ty, .. } => {
+        ty::InstanceDef::DropGlue { drop_in_place: def_id, drop_ty: ty, invoke_ty } => {
             // FIXME(#91576): Drop shims for coroutines aren't subject to the MIR passes at the end
             // of this function. Is this intentional?
             if let Some(ty::Coroutine(coroutine_def_id, args)) = ty.map(Ty::kind) {
@@ -152,7 +152,7 @@ fn make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'
                 return body;
             }
 
-            build_drop_shim(tcx, def_id, ty)
+            build_drop_shim(tcx, def_id, ty, invoke_ty)
         }
         ty::InstanceDef::ThreadLocalShim(..) => build_thread_local_shim(tcx, instance),
         ty::InstanceDef::CloneShim(def_id, ty) => build_clone_shim(tcx, def_id, ty),
@@ -235,8 +235,14 @@ fn local_decls_for_sig<'tcx>(
         .collect()
 }
 
-fn build_drop_shim<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId, ty: Option<Ty<'tcx>>) -> Body<'tcx> {
-    debug!("build_drop_shim(def_id={:?}, ty={:?})", def_id, ty);
+// MARK
+fn build_drop_shim<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    def_id: DefId,
+    ty: Option<Ty<'tcx>>,
+    invoke_ty: Option<Ty<'tcx>>,
+) -> Body<'tcx> {
+    debug!("build_drop_shim(def_id={:?}, ty={:?}, invoke_ty={:?})", def_id, ty, invoke_ty);
 
     assert!(!matches!(ty, Some(ty) if ty.is_coroutine()));
 
@@ -245,6 +251,15 @@ fn build_drop_shim<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId, ty: Option<Ty<'tcx>>)
     } else {
         GenericArgs::identity_for_item(tcx, def_id)
     };
+
+    if invoke_ty.is_some() {
+        // MARK
+        let underlying_instance =
+            ty::InstanceDef::DropGlue { drop_in_place: def_id, drop_ty: ty, invoke_ty };
+        // FIXME this may not always be direct callable
+        return build_call_shim(tcx, underlying_instance, None, CallKind::Direct(def_id));
+    }
+
     let sig = tcx.fn_sig(def_id).instantiate(tcx, args);
     let sig = tcx.instantiate_bound_regions_with_erased(sig);
     let span = tcx.def_span(def_id);
@@ -263,11 +278,10 @@ fn build_drop_shim<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId, ty: Option<Ty<'tcx>>)
     block(&mut blocks, TerminatorKind::Goto { target: return_block });
     block(&mut blocks, TerminatorKind::Return);
 
-    //FIXME do we ever want a replaced ty here?
     let source = MirSource::from_instance(ty::InstanceDef::DropGlue {
         drop_in_place: def_id,
         drop_ty: ty,
-        invoke_ty: None,
+        invoke_ty,
     });
     let mut body =
         new_body(source, blocks, local_decls_for_sig(&sig, span), sig.inputs().len(), span);
@@ -726,17 +740,22 @@ fn build_call_shim<'tcx>(
     // `FnPtrShim` contains the fn pointer type that a call shim is being built for - this is used
     // to substitute into the signature of the shim. It is not necessary for users of this
     // MIR body to perform further substitutions (see `InstanceDef::has_polymorphic_mir_body`).
-    let (sig_args, untuple_args) = if let ty::InstanceDef::FnPtrShim(_, ty) = instance {
-        let sig = tcx.instantiate_bound_regions_with_erased(ty.fn_sig(tcx));
+    let (sig_args, untuple_args, call_args) = match instance {
+        ty::InstanceDef::FnPtrShim(_, ty) => {
+            let sig = tcx.instantiate_bound_regions_with_erased(ty.fn_sig(tcx));
 
-        let untuple_args = sig.inputs();
+            let untuple_args = sig.inputs();
 
-        // Create substitutions for the `Self` and `Args` generic parameters of the shim body.
-        let arg_tup = Ty::new_tup(tcx, untuple_args);
+            // Create substitutions for the `Self` and `Args` generic parameters of the shim body.
+            let arg_tup = Ty::new_tup(tcx, untuple_args);
 
-        (Some([ty.into(), arg_tup.into()]), Some(untuple_args))
-    } else {
-        (None, None)
+            (Some(tcx.mk_args(&[ty.into(), arg_tup.into()])), Some(untuple_args), None)
+        }
+        ty::InstanceDef::DropGlue { drop_ty: Some(drop_ty), .. } => {
+            // FIXME invoke_ty should go into the lhs, but not doing it until basics work
+            (Some(tcx.mk_args(&[drop_ty.into()])), None, Some(tcx.mk_args(&[drop_ty.into()])))
+        }
+        _ => (None, None, None),
     };
 
     let def_id = instance.def_id();
@@ -745,7 +764,7 @@ fn build_call_shim<'tcx>(
 
     assert_eq!(sig_args.is_some(), !instance.has_polymorphic_mir_body());
     let mut sig = if let Some(sig_args) = sig_args {
-        sig.instantiate(tcx, &sig_args)
+        sig.instantiate(tcx, sig_args)
     } else {
         sig.instantiate_identity()
     };
@@ -835,7 +854,11 @@ fn build_call_shim<'tcx>(
 
         // `FnDef` call with optional receiver.
         CallKind::Direct(def_id) => {
-            let ty = tcx.type_of(def_id).instantiate_identity();
+            let ty = if let Some(call_args) = call_args {
+                tcx.type_of(def_id).instantiate(tcx, call_args)
+            } else {
+                tcx.type_of(def_id).instantiate_identity()
+            };
             (
                 Operand::Constant(Box::new(ConstOperand {
                     span,

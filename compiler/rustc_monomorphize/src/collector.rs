@@ -381,7 +381,7 @@ fn collect_items_rec<'tcx>(
             debug_assert!(should_codegen_locally(tcx, &instance));
 
             let ty = instance.ty(tcx, ty::ParamEnv::reveal_all());
-            visit_drop_use(tcx, ty, true, starting_item.span, &mut used_items);
+            visit_drop_use(tcx, ty, None, starting_item.span, &mut used_items);
 
             recursion_depth_reset = None;
 
@@ -847,7 +847,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MirUsedCollector<'a, 'tcx> {
             mir::TerminatorKind::Drop { ref place, .. } => {
                 let ty = place.ty(self.body, self.tcx).ty;
                 let ty = self.monomorphize(ty);
-                visit_drop_use(self.tcx, ty, true, source, self.output);
+                visit_drop_use(self.tcx, ty, None, source, self.output);
             }
             mir::TerminatorKind::InlineAsm { ref operands, .. } => {
                 for op in operands {
@@ -909,12 +909,19 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MirUsedCollector<'a, 'tcx> {
 fn visit_drop_use<'tcx>(
     tcx: TyCtxt<'tcx>,
     ty: Ty<'tcx>,
-    is_direct_call: bool,
+    invoke_ty: Option<Ty<'tcx>>,
     source: Span,
     output: &mut MonoItems<'tcx>,
 ) {
-    let instance = Instance::resolve_drop_in_place(tcx, ty);
-    visit_instance_use(tcx, instance, is_direct_call, source, output);
+    // FIXME this isn't strictly right
+    // MARK
+    let instance = Instance::resolve_drop_in_place(tcx, ty, invoke_ty);
+    visit_instance_use(tcx, instance, invoke_ty.is_none(), source, output);
+    if invoke_ty.is_some() {
+        // FIXME need to understand why this is necessary
+        let instance = Instance::resolve_drop_in_place(tcx, ty, None);
+        visit_instance_use(tcx, instance, false, source, output);
+    }
 }
 
 fn visit_fn_use<'tcx>(
@@ -1166,14 +1173,14 @@ fn create_fn_mono_item<'tcx>(
 /// the given trait/impl pair.
 fn create_mono_items_for_vtable_methods<'tcx>(
     tcx: TyCtxt<'tcx>,
-    trait_ty: Ty<'tcx>,
+    full_trait_ty: Ty<'tcx>,
     impl_ty: Ty<'tcx>,
     source: Span,
     output: &mut MonoItems<'tcx>,
 ) {
-    assert!(!trait_ty.has_escaping_bound_vars() && !impl_ty.has_escaping_bound_vars());
+    assert!(!full_trait_ty.has_escaping_bound_vars() && !impl_ty.has_escaping_bound_vars());
 
-    if let ty::Dynamic(trait_ty, ..) = trait_ty.kind() {
+    if let ty::Dynamic(trait_ty, ..) = full_trait_ty.kind() {
         if let Some(principal) = trait_ty.principal() {
             let poly_trait_ref = principal.with_self_ty(tcx, impl_ty);
             assert!(!poly_trait_ref.has_escaping_bound_vars());
@@ -1200,7 +1207,8 @@ fn create_mono_items_for_vtable_methods<'tcx>(
         }
 
         // Also add the destructor.
-        visit_drop_use(tcx, impl_ty, false, source, output);
+        // FIXME validate this is what I meant
+        visit_drop_use(tcx, impl_ty, Some(full_trait_ty), source, output);
     }
 }
 
@@ -1225,7 +1233,7 @@ impl<'v> RootCollector<'_, 'v> {
                     debug!("RootCollector: ADT drop-glue for `{id:?}`",);
 
                     let ty = self.tcx.type_of(id.owner_id.to_def_id()).no_bound_vars().unwrap();
-                    visit_drop_use(self.tcx, ty, true, DUMMY_SP, self.output);
+                    visit_drop_use(self.tcx, ty, None, DUMMY_SP, self.output);
                 }
             }
             DefKind::GlobalAsm => {

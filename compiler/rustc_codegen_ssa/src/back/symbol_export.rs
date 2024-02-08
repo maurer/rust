@@ -349,10 +349,14 @@ fn exported_symbols_provider_local(
                     }
                 }
                 MonoItem::Fn(Instance {
-                    def: InstanceDef::DropGlue { drop_in_place: def_id, drop_ty: Some(ty), .. },
+                    def:
+                        InstanceDef::DropGlue {
+                            drop_in_place: def_id,
+                            drop_ty: Some(ty),
+                            invoke_ty: None,
+                        },
                     args,
                 }) => {
-                    //FIXME do we need to do something for replaced types here for dylibs?
                     // A little sanity-check
                     debug_assert_eq!(
                         args.non_erasable_generics(tcx, def_id).next(),
@@ -535,7 +539,7 @@ pub fn symbol_name_for_instance_in_crate<'tcx>(
         }
         ExportedSymbol::DropGlue(ty) => rustc_symbol_mangling::symbol_name_for_instance_in_crate(
             tcx,
-            Instance::resolve_drop_in_place(tcx, ty),
+            Instance::resolve_drop_in_place(tcx, ty, None),
             instantiating_crate,
         ),
         ExportedSymbol::NoDefId(symbol_name) => symbol_name.to_string(),

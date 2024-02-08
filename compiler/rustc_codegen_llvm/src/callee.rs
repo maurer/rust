@@ -20,18 +20,19 @@ use rustc_middle::ty::{self, Instance, TypeVisitableExt};
 ///
 /// - `cx`: the crate context
 /// - `instance`: the instance to be instantiated
+#[instrument(skip(cx))]
 pub fn get_fn<'ll, 'tcx>(cx: &CodegenCx<'ll, 'tcx>, instance: Instance<'tcx>) -> &'ll Value {
     let tcx = cx.tcx();
-
-    debug!("get_fn(instance={:?})", instance);
 
     assert!(!instance.args.has_infer());
     assert!(!instance.args.has_escaping_bound_vars());
 
     if let Some(&llfn) = cx.instances.borrow().get(&instance) {
+        debug!("instances.borrow().get() successful");
         return llfn;
     }
 
+    // MARK
     let sym = tcx.symbol_name(instance).name;
     debug!(
         "get_fn({:?}: {:?}) => {}",

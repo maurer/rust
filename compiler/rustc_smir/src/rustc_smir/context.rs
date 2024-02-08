@@ -436,7 +436,7 @@ impl<'tcx> Context for TablesWrapper<'tcx> {
         let mut tables = self.0.borrow_mut();
         let tcx = tables.tcx;
         let internal_ty = ty.internal(&mut *tables, tcx);
-        let instance = Instance::resolve_drop_in_place(tables.tcx, internal_ty);
+        let instance = Instance::resolve_drop_in_place(tables.tcx, internal_ty, None);
         instance.stable(&mut *tables)
     }
 

@@ -89,6 +89,14 @@ pub(super) fn mangle<'tcx>(
         _ => {}
     }
 
+    // FIXME do this in all manglers
+    // FIXME do print the type in here too
+    if let ty::InstanceDef::DropGlue { invoke_ty: Some(ty), .. } = instance.def {
+        let _ = printer.write_str("{{cfi-dyn-shim(");
+        let _ = printer.print_type(ty);
+        let _ = printer.write_str(")}}");
+    }
+
     printer.path.finish(hash)
 }
 
