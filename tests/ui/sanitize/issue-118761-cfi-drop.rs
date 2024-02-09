@@ -5,14 +5,8 @@
 // run-pass
 
 struct Bar;
-trait Fooable {
-    fn foo(&self) -> i32;
-}
-impl Fooable for Bar {
-    fn foo(&self) -> i32 {
-        0
-    }
-}
+trait Fooable {}
+impl Fooable for Bar {}
 
 fn main() {
    let _: Box<dyn Fooable> = Box::new(Bar);
