@@ -949,7 +949,6 @@ pub enum BoundRegionKind {
 pub enum DynKind {
     Dyn,
     DynStar,
-    Receiver,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

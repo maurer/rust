@@ -702,7 +702,11 @@ pub trait PrettyPrinter<'tcx>: Printer<'tcx> + fmt::Write {
                 if print_r {
                     p!("(");
                 }
-                p!(write("{} ", repr.repr_name()), print(data));
+                match repr {
+                    ty::Dyn => p!("dyn "),
+                    ty::DynStar => p!("dyn* "),
+                }
+                p!(print(data));
                 if print_r {
                     p!(" + ", print(r), ")");
                 }

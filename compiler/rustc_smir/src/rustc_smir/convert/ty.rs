@@ -36,7 +36,6 @@ impl<'tcx> Stable<'tcx> for ty::DynKind {
         match self {
             ty::Dyn => stable_mir::ty::DynKind::Dyn,
             ty::DynStar => stable_mir::ty::DynKind::DynStar,
-            ty::Receiver => stable_mir::ty::DynKind::Receiver,
         }
     }
 }

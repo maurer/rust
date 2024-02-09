@@ -235,8 +235,6 @@ fn layout_of_uncached<'tcx>(
             tcx.mk_layout(cx.scalar_pair(data, vtable))
         }
 
-        ty::Dynamic(_, _, ty::Receiver) => scalar(Pointer(AddressSpace::DATA)),
-
         // Arrays and slices.
         ty::Array(element, mut count) => {
             if count.has_projections() {

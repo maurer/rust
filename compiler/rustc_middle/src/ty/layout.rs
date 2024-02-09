@@ -812,8 +812,7 @@ where
                 | ty::FnDef(..)
                 | ty::CoroutineWitness(..)
                 | ty::Foreign(..)
-                | ty::Dynamic(_, _, ty::Dyn)
-                | ty::Dynamic(_, _, ty::Receiver) => {
+                | ty::Dynamic(_, _, ty::Dyn) => {
                     bug!("TyAndLayout::field({:?}): not applicable", this)
                 }
 

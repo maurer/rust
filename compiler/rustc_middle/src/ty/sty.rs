@@ -2309,9 +2309,7 @@ impl<'tcx> Ty<'tcx> {
             | ty::Foreign(..)
             // `dyn*` has metadata = ().
             | ty::Dynamic(_, _, ty::DynStar)
-            // `dyn*.0` also has no metadata
-            | ty::Dynamic(_, _, ty::Receiver)
-            // If returned by `struct_tail_with_normalize` this is a unit struct
+            // If returned by `struct_tail_without_normalization` this is a unit struct
             // without any fields, or not a struct, and therefore is Sized.
             | ty::Adt(..)
             // If returned by `struct_tail_with_normalize` this is the empty tuple,

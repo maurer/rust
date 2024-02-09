@@ -337,7 +337,6 @@ impl RustcInternal for DynKind {
         match self {
             DynKind::Dyn => rustc_ty::DynKind::Dyn,
             DynKind::DynStar => rustc_ty::DynKind::DynStar,
-            DynKind::Receiver => rustc_ty::DynKind::Receiver,
         }
     }
 }

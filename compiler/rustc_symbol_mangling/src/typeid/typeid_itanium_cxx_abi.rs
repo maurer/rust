@@ -701,7 +701,6 @@ fn encode_ty<'tcx>(
             let mut s = String::from(match kind {
                 ty::Dyn => "u3dynI",
                 ty::DynStar => "u7dynstarI",
-                ty::Receiver => "u8receiverI",
             });
             s.push_str(&encode_predicates(tcx, predicates, dict, options));
             s.push_str(&encode_region(tcx, *region, dict, options));
