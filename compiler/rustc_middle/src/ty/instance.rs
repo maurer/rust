@@ -150,11 +150,13 @@ impl<'tcx> Instance<'tcx> {
             debug!("Need to convert {ty} based on {invoke_ty}");
             let sig = ty.fn_sig(tcx).map_bound(|sig| {
                 // FIXME add assertion that this is actually a receiver?
-                tcx.mk_fn_sig(std::iter::once(invoke_ty).chain(sig.inputs().into_iter().skip(1).copied()),
-                              sig.output(),
-                              sig.c_variadic,
-                              sig.unsafety,
-                              sig.abi)
+                tcx.mk_fn_sig(
+                    std::iter::once(invoke_ty).chain(sig.inputs().into_iter().skip(1).copied()),
+                    sig.output(),
+                    sig.c_variadic,
+                    sig.unsafety,
+                    sig.abi,
+                )
             });
             ty = Ty::new_fn_ptr(tcx, sig);
             debug!("Re-rigged to {ty}");

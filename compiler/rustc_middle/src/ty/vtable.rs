@@ -82,13 +82,18 @@ pub(super) fn vtable_allocation_provider<'tcx>(
 
     let cfi = tcx.sess.is_sanitizer_kcfi_enabled() || tcx.sess.is_sanitizer_cfi_enabled();
 
-    let invoke_ty = cfi.then(|| poly_trait_ref.map(|poly_trait_ref| {
-        let pep: ty::PolyExistentialPredicate<'tcx> =
-            poly_trait_ref.map_bound(ty::ExistentialPredicate::Trait);
-        let existential_predicates = tcx.mk_poly_existential_predicates(&[pep]);
-        let d = Ty::new_dynamic(tcx, existential_predicates, tcx.lifetimes.re_erased, ty::Dyn);
-        Ty::new_mut_ptr(tcx, d)
-    })).flatten();
+    let invoke_ty = cfi
+        .then(|| {
+            poly_trait_ref.map(|poly_trait_ref| {
+                let pep: ty::PolyExistentialPredicate<'tcx> =
+                    poly_trait_ref.map_bound(ty::ExistentialPredicate::Trait);
+                let existential_predicates = tcx.mk_poly_existential_predicates(&[pep]);
+                let d =
+                    Ty::new_dynamic(tcx, existential_predicates, tcx.lifetimes.re_erased, ty::Dyn);
+                Ty::new_mut_ptr(tcx, d)
+            })
+        })
+        .flatten();
 
     for (idx, entry) in vtable_entries.iter().enumerate() {
         let idx: u64 = u64::try_from(idx).unwrap();

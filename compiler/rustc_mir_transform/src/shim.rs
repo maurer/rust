@@ -257,7 +257,12 @@ fn build_drop_shim<'tcx>(
         let underlying_instance =
             ty::InstanceDef::DropGlue { drop_in_place: def_id, drop_ty: ty, invoke_ty };
         // FIXME this may not always be direct callable
-        return build_call_shim(tcx, underlying_instance, Some(Adjustment::Identity), CallKind::Direct(def_id));
+        return build_call_shim(
+            tcx,
+            underlying_instance,
+            Some(Adjustment::Identity),
+            CallKind::Direct(def_id),
+        );
     }
 
     let sig = tcx.fn_sig(def_id).instantiate(tcx, args);
@@ -751,19 +756,17 @@ fn build_call_shim<'tcx>(
 
             (Some(tcx.mk_args(&[ty.into(), arg_tup.into()])), Some(untuple_args), None)
         }
-        ty::InstanceDef::DropGlue { invoke_ty: None, .. } =>
-            bug!("Trying to generate a call shim for drop glue without an invoke_ty mask?"),
+        ty::InstanceDef::DropGlue { invoke_ty: None, .. } => {
+            bug!("Trying to generate a call shim for drop glue without an invoke_ty mask?")
+        }
         ty::InstanceDef::DropGlue { drop_ty, invoke_ty: Some(invoke_ty), .. } => {
             debug!("Generating drop CFI stub");
             let call_args = drop_ty.map(|drop_ty| tcx.mk_args(&[drop_ty.into()]));
-            let sig_args = if drop_ty.is_some() {
-                Some(tcx.mk_args(&[invoke_ty.into()]))
-            } else {
-                None
-            };
+            let sig_args =
+                if drop_ty.is_some() { Some(tcx.mk_args(&[invoke_ty.into()])) } else { None };
             (sig_args, None, call_args)
         }
-        _ => (None, None, None)
+        _ => (None, None, None),
     };
 
     let def_id = instance.def_id();
@@ -822,7 +825,7 @@ fn build_call_shim<'tcx>(
         *self_arg = invoke_ty;
         sig.inputs_and_output = tcx.mk_type_list(&inputs_and_output);
     }
- 
+
     let span = tcx.def_span(def_id);
 
     debug!(?sig);

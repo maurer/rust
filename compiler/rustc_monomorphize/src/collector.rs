@@ -1222,7 +1222,7 @@ fn create_mono_items_for_vtable_methods<'tcx>(
         } else {
             visit_drop_use(tcx, impl_ty, None, source, output);
         }
-   }
+    }
 }
 
 //=-----------------------------------------------------------------------------

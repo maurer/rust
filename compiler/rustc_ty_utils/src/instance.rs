@@ -59,7 +59,7 @@ fn resolve_instance<'tcx>(
                 }
             } else {
                 debug!(" => trivial drop glue");
-                ty::InstanceDef::DropGlue { drop_in_place: def_id, drop_ty: None, invoke_ty}
+                ty::InstanceDef::DropGlue { drop_in_place: def_id, drop_ty: None, invoke_ty }
             }
         } else {
             debug!(" => free item");
