@@ -83,7 +83,8 @@ pub(super) fn vtable_allocation_provider<'tcx>(
         let pep: ty::PolyExistentialPredicate<'tcx> =
             poly_trait_ref.map_bound(ty::ExistentialPredicate::Trait);
         let existential_predicates = tcx.mk_poly_existential_predicates(&[pep]);
-        Ty::new_dynamic(tcx, existential_predicates, tcx.lifetimes.re_erased, ty::Receiver)
+        let d = Ty::new_dynamic(tcx, existential_predicates, tcx.lifetimes.re_erased, ty::Dyn);
+        Ty::new_mut_ptr(tcx, d)
     });
 
     ty::print::with_no_trimmed_paths!({

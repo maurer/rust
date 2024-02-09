@@ -1208,7 +1208,9 @@ fn create_mono_items_for_vtable_methods<'tcx>(
 
         // Also add the destructor.
         // FIXME validate this is what I meant
-        let fixit = Ty::new_dynamic(tcx, trait_ty, tcx.lifetimes.re_erased, ty::Receiver);
+        let d = Ty::new_dynamic(tcx, trait_ty, tcx.lifetimes.re_erased, ty::Dyn);
+        //FIXME mut ptr?
+        let fixit = Ty::new_mut_ptr(tcx, d);
         visit_drop_use(tcx, impl_ty, Some(fixit), source, output);
     }
 }

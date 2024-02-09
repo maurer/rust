@@ -374,7 +374,7 @@ fn fn_abi_of_instance<'tcx>(
         extra_args,
         caller_location,
         Some(instance.def_id()),
-        matches!(instance.def, ty::InstanceDef::Virtual(..)),
+        matches!(instance.def, ty::InstanceDef::Virtual(..)) || matches!(instance.def, ty::InstanceDef::DropGlue{ invoke_ty: Some(..), .. }),
     )
 }
 
@@ -618,8 +618,6 @@ fn fn_abi_new_uncached<'tcx>(
         let is_drop_target = is_drop_in_place && arg_idx == Some(0);
         let drop_target_pointee = is_drop_target.then(|| match ty.kind() {
             ty::RawPtr(ty::TypeAndMut { ty, .. }) => *ty,
-            ty::Dynamic(predicates, regions, ty::Receiver) => cx.tcx.mk_ty_from_kind(ty::Dynamic(*predicates, *regions, ty::Dyn)),
-            //FIXME I'm now wondering if force_thin can replace Receiver
             _ => bug!("argument to drop_in_place is not a raw ptr: {:?}", ty),
         });
 
