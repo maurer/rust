@@ -46,6 +46,9 @@ fn make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'
 
             build_call_shim(tcx, instance, Some(adjustment), CallKind::Indirect(ty))
         }
+        ty::InstanceDef::CfiShim(def_id, _ty) => {
+            build_call_shim(tcx, instance, Some(Adjustment::Identity), CallKind::Direct(def_id))
+        }
         // We are generating a call back to our def-id, which the
         // codegen backend knows to turn to an actual call, be it
         // a virtual call, or a direct call to a function for which
@@ -780,6 +783,14 @@ fn build_call_shim<'tcx>(
         let self_arg = &mut inputs_and_output[0];
         debug_assert!(tcx.generics_of(def_id).has_self && *self_arg == tcx.types.self_param);
         *self_arg = Ty::new_mut_ptr(tcx, *self_arg);
+        sig.inputs_and_output = tcx.mk_type_list(&inputs_and_output);
+    }
+
+    // FIXME as above, this logic is also in `Instance::ty`
+    if let ty::InstanceDef::CfiShim(_, ty) = instance {
+        // Modify fn(&self) to fn(&dyn Trait)
+        let mut inputs_and_output = sig.inputs_and_output.to_vec();
+        inputs_and_output[0] = ty;
         sig.inputs_and_output = tcx.mk_type_list(&inputs_and_output);
     }
 

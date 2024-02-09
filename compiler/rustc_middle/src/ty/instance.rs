@@ -135,6 +135,10 @@ pub enum InstanceDef<'tcx> {
     ///
     /// The `DefId` is for `FnPtr::addr`, the `Ty` is the type `T`.
     FnPtrAddrShim(DefId, Ty<'tcx>),
+
+    /// Shim generated for the sake of CFI which replaces the receiver with the
+    /// provided type.
+    CfiShim(DefId, Ty<'tcx>),
 }
 
 impl<'tcx> Instance<'tcx> {
@@ -142,7 +146,22 @@ impl<'tcx> Instance<'tcx> {
     /// lifetimes erased, allowing a `ParamEnv` to be specified for use during normalization.
     pub fn ty(&self, tcx: TyCtxt<'tcx>, param_env: ty::ParamEnv<'tcx>) -> Ty<'tcx> {
         let ty = tcx.type_of(self.def.def_id());
-        tcx.instantiate_and_normalize_erasing_regions(self.args, param_env, ty)
+        let mut ty = tcx.instantiate_and_normalize_erasing_regions(self.args, param_env, ty);
+        if let InstanceDef::CfiShim(_, invoke_ty) = self.def {
+            debug!("Rewriting CFI shim type {ty} using {invoke_ty}");
+            let sig = ty.fn_sig(tcx).map_bound(|sig| {
+                tcx.mk_fn_sig(
+                    std::iter::once(invoke_ty).chain(sig.inputs().into_iter().skip(1).copied()),
+                    sig.output(),
+                    sig.c_variadic,
+                    sig.unsafety,
+                    sig.abi,
+                )
+            });
+            ty = Ty::new_fn_ptr(tcx, sig);
+            debug!("Transformed to {ty}");
+        }
+        ty
     }
 
     /// Finds a crate that contains a monomorphization of this instance that
@@ -198,6 +217,7 @@ impl<'tcx> InstanceDef<'tcx> {
             | InstanceDef::DropGlue(def_id, _)
             | InstanceDef::CloneShim(def_id, _)
             | InstanceDef::FnPtrAddrShim(def_id, _) => def_id,
+            InstanceDef::CfiShim(def_id, _) => def_id,
         }
     }
 
@@ -209,6 +229,7 @@ impl<'tcx> InstanceDef<'tcx> {
                 Some(def_id)
             }
             InstanceDef::VTableShim(..)
+            | InstanceDef::CfiShim(..)
             | InstanceDef::ReifyShim(..)
             | InstanceDef::FnPtrShim(..)
             | InstanceDef::Virtual(..)
@@ -309,6 +330,7 @@ impl<'tcx> InstanceDef<'tcx> {
             | InstanceDef::ThreadLocalShim(..)
             | InstanceDef::FnPtrAddrShim(..)
             | InstanceDef::FnPtrShim(..)
+            | InstanceDef::CfiShim(..)
             | InstanceDef::DropGlue(_, Some(_)) => false,
             InstanceDef::ClosureOnceShim { .. }
             | InstanceDef::ConstructCoroutineInClosureShim { .. }
@@ -356,6 +378,7 @@ fn fmt_instance(
         InstanceDef::DropGlue(_, Some(ty)) => write!(f, " - shim(Some({ty}))"),
         InstanceDef::CloneShim(_, ty) => write!(f, " - shim({ty})"),
         InstanceDef::FnPtrAddrShim(_, ty) => write!(f, " - shim({ty})"),
+        InstanceDef::CfiShim(_, ty) => write!(f, " - cfi-shim({ty})"),
     }
 }
 
