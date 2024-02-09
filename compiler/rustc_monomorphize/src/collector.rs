@@ -906,6 +906,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MirUsedCollector<'a, 'tcx> {
     }
 }
 
+#[instrument(skip(tcx, output))]
 fn visit_drop_use<'tcx>(
     tcx: TyCtxt<'tcx>,
     ty: Ty<'tcx>,
@@ -921,6 +922,7 @@ fn visit_drop_use<'tcx>(
         // FIXME need to understand why this is necessary
         let instance = Instance::resolve_drop_in_place(tcx, ty, None);
         visit_instance_use(tcx, instance, false, source, output);
+        visit_instance_use(tcx, instance, true, source, output);
     }
 }
 
@@ -953,6 +955,7 @@ fn visit_instance_use<'tcx>(
 ) {
     debug!("visit_item_use({:?}, is_direct_call={:?})", instance, is_direct_call);
     if !should_codegen_locally(tcx, &instance) {
+        debug!("skipping adding to output, assumed to generate locally");
         return;
     }
 
