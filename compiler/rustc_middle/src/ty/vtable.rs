@@ -79,15 +79,11 @@ pub(super) fn vtable_allocation_provider<'tcx>(
     // allocation is correctly aligned as we created it above. Also we're only offsetting by
     // multiples of `ptr_align`, which means that it will stay aligned to `ptr_align`.
 
-    //FIXME: This type is wrong. This represents the left half of `&dyn Foo` as `&dyn Foo`.
-    //FIXME: I should be passing in `dyn Foo` or `Foo`, *not* `&mut dyn Foo` to allow `invoke_ty`
-    //to generalize to alternate receivers when we get to methods. Perhaps this should be done via
-    //a new ExistentialPredicate?
     let mut invoke_ty = poly_trait_ref.map(|poly_trait_ref| {
         let pep: ty::PolyExistentialPredicate<'tcx> =
             poly_trait_ref.map_bound(ty::ExistentialPredicate::Trait);
         let existential_predicates = tcx.mk_poly_existential_predicates(&[pep]);
-        Ty::new_dynamic(tcx, existential_predicates, tcx.lifetimes.re_erased, ty::Dyn)
+        Ty::new_dynamic(tcx, existential_predicates, tcx.lifetimes.re_erased, ty::Receiver)
     });
 
     ty::print::with_no_trimmed_paths!({

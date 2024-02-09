@@ -145,7 +145,21 @@ impl<'tcx> Instance<'tcx> {
     /// lifetimes erased, allowing a `ParamEnv` to be specified for use during normalization.
     pub fn ty(&self, tcx: TyCtxt<'tcx>, param_env: ty::ParamEnv<'tcx>) -> Ty<'tcx> {
         let ty = tcx.type_of(self.def.def_id());
-        tcx.instantiate_and_normalize_erasing_regions(self.args, param_env, ty)
+        let mut ty = tcx.instantiate_and_normalize_erasing_regions(self.args, param_env, ty);
+        if let InstanceDef::DropGlue { invoke_ty: Some(invoke_ty), .. } = self.def {
+            debug!("Need to convert {ty} based on {invoke_ty}");
+            let sig = ty.fn_sig(tcx).map_bound(|sig| {
+                // FIXME add assertion that this is actually a receiver?
+                tcx.mk_fn_sig(std::iter::once(invoke_ty).chain(sig.inputs().into_iter().skip(1).copied()),
+                              sig.output(),
+                              sig.c_variadic,
+                              sig.unsafety,
+                              sig.abi)
+            });
+            ty = Ty::new_fn_ptr(tcx, sig);
+            debug!("Re-rigged to {ty}");
+        }
+        ty
     }
 
     /// Finds a crate that contains a monomorphization of this instance that

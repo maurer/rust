@@ -215,6 +215,9 @@ enum Adjustment {
     /// In this case we need to ensure that the `Self` is dropped after the call, as the callee
     /// won't do it for us.
     RefMut,
+
+    /// Cast the receiver on its way through
+    Cast,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -257,7 +260,7 @@ fn build_drop_shim<'tcx>(
         let underlying_instance =
             ty::InstanceDef::DropGlue { drop_in_place: def_id, drop_ty: ty, invoke_ty };
         // FIXME this may not always be direct callable
-        return build_call_shim(tcx, underlying_instance, None, CallKind::Direct(def_id));
+        return build_call_shim(tcx, underlying_instance, Some(Adjustment::Cast), CallKind::Direct(def_id));
     }
 
     let sig = tcx.fn_sig(def_id).instantiate(tcx, args);
@@ -751,11 +754,14 @@ fn build_call_shim<'tcx>(
 
             (Some(tcx.mk_args(&[ty.into(), arg_tup.into()])), Some(untuple_args), None)
         }
-        ty::InstanceDef::DropGlue { drop_ty: Some(drop_ty), .. } => {
-            // FIXME invoke_ty should go into the lhs, but not doing it until basics work
-            (Some(tcx.mk_args(&[drop_ty.into()])), None, Some(tcx.mk_args(&[drop_ty.into()])))
+        ty::InstanceDef::DropGlue { invoke_ty: None, .. } =>
+            bug!("Trying to generate a call shim for drop glue without an invoke_ty mask?"),
+        ty::InstanceDef::DropGlue { drop_ty, invoke_ty: Some(invoke_ty), .. } => {
+            debug!("Generating drop CFI stub");
+            let call_args = drop_ty.map(|drop_ty| tcx.mk_args(&[drop_ty.into()]));
+            (Some(tcx.mk_args(&[invoke_ty.into()])), None, call_args)
         }
-        _ => (None, None, None),
+        _ => (None, None, None)
     };
 
     let def_id = instance.def_id();
@@ -791,6 +797,7 @@ fn build_call_shim<'tcx>(
                 DerefSource::MutRef => Ty::new_mut_ref(tcx, tcx.lifetimes.re_erased, fnty),
                 DerefSource::MutPtr => Ty::new_mut_ptr(tcx, fnty),
             },
+            Adjustment::Cast => bug!("`Cast` not currently used with indirect calls: {instance:?}"),
             Adjustment::RefMut => bug!("`RefMut` is never used with indirect calls: {instance:?}"),
         };
         sig.inputs_and_output = tcx.mk_type_list(&inputs_and_output);
@@ -823,6 +830,8 @@ fn build_call_shim<'tcx>(
     let rcvr = rcvr_adjustment.map(|rcvr_adjustment| match rcvr_adjustment {
         Adjustment::Identity => Operand::Move(rcvr_place()),
         Adjustment::Deref { source: _ } => Operand::Move(tcx.mk_place_deref(rcvr_place())),
+        //FIXME this is probably wrong, but if it works, we just use identity
+        Adjustment::Cast => Operand::Move(rcvr_place()),
         Adjustment::RefMut => {
             // let rcvr = &mut rcvr;
             let ref_rcvr = local_decls.push(

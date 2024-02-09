@@ -43,6 +43,7 @@ fn fn_sig_for_fn_abi<'tcx>(
 
     let ty = instance.ty(tcx, param_env);
     match *ty.kind() {
+        ty::FnPtr(sig) => sig,
         ty::FnDef(..) => {
             // HACK(davidtwco,eddyb): This is a workaround for polymorphization considering
             // parameters unused if they show up in the signature, but not in the `mir::Body`
@@ -617,6 +618,8 @@ fn fn_abi_new_uncached<'tcx>(
         let is_drop_target = is_drop_in_place && arg_idx == Some(0);
         let drop_target_pointee = is_drop_target.then(|| match ty.kind() {
             ty::RawPtr(ty::TypeAndMut { ty, .. }) => *ty,
+            ty::Dynamic(predicates, regions, ty::Receiver) => cx.tcx.mk_ty_from_kind(ty::Dynamic(*predicates, *regions, ty::Dyn)),
+            //FIXME I'm now wondering if force_thin can replace Receiver
             _ => bug!("argument to drop_in_place is not a raw ptr: {:?}", ty),
         });
 
