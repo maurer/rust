@@ -916,13 +916,17 @@ fn visit_drop_use<'tcx>(
 ) {
     // FIXME this isn't strictly right
     // MARK
-    let instance = Instance::resolve_drop_in_place(tcx, ty, invoke_ty);
-    visit_instance_use(tcx, instance, invoke_ty.is_none(), source, output);
-    if invoke_ty.is_some() {
-        // FIXME need to understand why this is necessary
+    if tcx.sess.is_sanitizer_kcfi_enabled() || tcx.sess.is_sanitizer_cfi_enabled() {
+        let instance = Instance::resolve_drop_in_place(tcx, ty, invoke_ty);
+        visit_instance_use(tcx, instance, invoke_ty.is_none(), source, output);
+        if invoke_ty.is_some() {
+            // FIXME need to understand why this is necessary
+            let instance = Instance::resolve_drop_in_place(tcx, ty, None);
+            visit_instance_use(tcx, instance, true, source, output);
+        }
+    } else {
         let instance = Instance::resolve_drop_in_place(tcx, ty, None);
-        visit_instance_use(tcx, instance, false, source, output);
-        visit_instance_use(tcx, instance, true, source, output);
+        visit_instance_use(tcx, instance, invoke_ty.is_none(), source, output);
     }
 }
 
@@ -1207,15 +1211,18 @@ fn create_mono_items_for_vtable_methods<'tcx>(
                 })
                 .map(|item| create_fn_mono_item(tcx, item, source));
             output.extend(methods);
-        }
 
-        // Also add the destructor.
-        // FIXME validate this is what I meant
-        let d = Ty::new_dynamic(tcx, trait_ty, tcx.lifetimes.re_erased, ty::Dyn);
-        //FIXME mut ptr?
-        let fixit = Ty::new_mut_ptr(tcx, d);
-        visit_drop_use(tcx, impl_ty, Some(fixit), source, output);
-    }
+            // Also add the destructor.
+            let pep: ty::PolyExistentialPredicate<'tcx> =
+                principal.map_bound(ty::ExistentialPredicate::Trait);
+            let existential_predicates = tcx.mk_poly_existential_predicates(&[pep]);
+            let d = Ty::new_dynamic(tcx, existential_predicates, tcx.lifetimes.re_erased, ty::Dyn);
+            let fixit = Ty::new_mut_ptr(tcx, d);
+            visit_drop_use(tcx, impl_ty, Some(fixit), source, output);
+        } else {
+            visit_drop_use(tcx, impl_ty, None, source, output);
+        }
+   }
 }
 
 //=-----------------------------------------------------------------------------

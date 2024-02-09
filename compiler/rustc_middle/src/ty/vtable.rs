@@ -47,6 +47,7 @@ pub const COMMON_VTABLE_ENTRIES_ALIGN: usize = 2;
 
 /// Retrieves an allocation that represents the contents of a vtable.
 /// Since this is a query, allocations are cached and not duplicated.
+#[instrument(skip(tcx))]
 pub(super) fn vtable_allocation_provider<'tcx>(
     tcx: TyCtxt<'tcx>,
     key: (Ty<'tcx>, Option<ty::PolyExistentialTraitRef<'tcx>>),

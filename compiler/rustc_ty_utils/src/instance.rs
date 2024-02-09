@@ -34,6 +34,9 @@ fn resolve_instance<'tcx>(
         } else if Some(def_id) == tcx.lang_items().drop_in_place_fn() {
             let drop_ty = args.type_at(0);
 
+            let invoke_ty = if args.len() >= 2 { Some(args.type_at(1)) } else { None };
+            args = tcx.mk_args(&[drop_ty.into()]);
+
             if drop_ty.needs_drop(tcx, param_env) {
                 debug!(" => nontrivial drop glue");
                 match *drop_ty.kind() {
@@ -49,11 +52,6 @@ fn resolve_instance<'tcx>(
                     _ => return Ok(None),
                 }
 
-                let invoke_ty = if args.len() >= 2 { Some(args.type_at(1)) } else { None };
-                // FIXME unclear if this will break other things - we might need these to be
-                // different functions?
-                args = tcx.mk_args(&[drop_ty.into()]);
-
                 ty::InstanceDef::DropGlue {
                     drop_in_place: def_id,
                     drop_ty: Some(drop_ty),
@@ -61,7 +59,7 @@ fn resolve_instance<'tcx>(
                 }
             } else {
                 debug!(" => trivial drop glue");
-                ty::InstanceDef::DropGlue { drop_in_place: def_id, drop_ty: None, invoke_ty: None }
+                ty::InstanceDef::DropGlue { drop_in_place: def_id, drop_ty: None, invoke_ty}
             }
         } else {
             debug!(" => free item");

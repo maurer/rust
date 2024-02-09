@@ -759,7 +759,12 @@ fn build_call_shim<'tcx>(
         ty::InstanceDef::DropGlue { drop_ty, invoke_ty: Some(invoke_ty), .. } => {
             debug!("Generating drop CFI stub");
             let call_args = drop_ty.map(|drop_ty| tcx.mk_args(&[drop_ty.into()]));
-            (Some(tcx.mk_args(&[invoke_ty.into()])), None, call_args)
+            let sig_args = if drop_ty.is_some() {
+                Some(tcx.mk_args(&[invoke_ty.into()]))
+            } else {
+                None
+            };
+            (sig_args, None, call_args)
         }
         _ => (None, None, None)
     };
