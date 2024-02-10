@@ -381,7 +381,7 @@ fn collect_items_rec<'tcx>(
             debug_assert!(should_codegen_locally(tcx, &instance));
 
             let ty = instance.ty(tcx, ty::ParamEnv::reveal_all());
-            visit_drop_use(tcx, ty, None, starting_item.span, &mut used_items);
+            visit_drop_use(tcx, ty, true, None, starting_item.span, &mut used_items);
 
             recursion_depth_reset = None;
 
@@ -847,7 +847,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MirUsedCollector<'a, 'tcx> {
             mir::TerminatorKind::Drop { ref place, .. } => {
                 let ty = place.ty(self.body, self.tcx).ty;
                 let ty = self.monomorphize(ty);
-                visit_drop_use(self.tcx, ty, None, source, self.output);
+                visit_drop_use(self.tcx, ty, true, None, source, self.output);
             }
             mir::TerminatorKind::InlineAsm { ref operands, .. } => {
                 for op in operands {
@@ -910,6 +910,7 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MirUsedCollector<'a, 'tcx> {
 fn visit_drop_use<'tcx>(
     tcx: TyCtxt<'tcx>,
     ty: Ty<'tcx>,
+    is_direct_call: bool,
     invoke_ty: Option<Ty<'tcx>>,
     source: Span,
     output: &mut MonoItems<'tcx>,
@@ -918,7 +919,7 @@ fn visit_drop_use<'tcx>(
     // MARK
     if tcx.sess.is_sanitizer_kcfi_enabled() || tcx.sess.is_sanitizer_cfi_enabled() {
         let instance = Instance::resolve_drop_in_place(tcx, ty, invoke_ty);
-        visit_instance_use(tcx, instance, invoke_ty.is_none(), source, output);
+        visit_instance_use(tcx, instance, is_direct_call, source, output);
         if invoke_ty.is_some() {
             // FIXME need to understand why this is necessary
             let instance = Instance::resolve_drop_in_place(tcx, ty, None);
@@ -926,7 +927,7 @@ fn visit_drop_use<'tcx>(
         }
     } else {
         let instance = Instance::resolve_drop_in_place(tcx, ty, None);
-        visit_instance_use(tcx, instance, invoke_ty.is_none(), source, output);
+        visit_instance_use(tcx, instance, is_direct_call, source, output);
     }
 }
 
@@ -1218,9 +1219,9 @@ fn create_mono_items_for_vtable_methods<'tcx>(
             let existential_predicates = tcx.mk_poly_existential_predicates(&[pep]);
             let d = Ty::new_dynamic(tcx, existential_predicates, tcx.lifetimes.re_erased, ty::Dyn);
             let fixit = Ty::new_mut_ptr(tcx, d);
-            visit_drop_use(tcx, impl_ty, Some(fixit), source, output);
+            visit_drop_use(tcx, impl_ty, false, Some(fixit), source, output);
         } else {
-            visit_drop_use(tcx, impl_ty, None, source, output);
+            visit_drop_use(tcx, impl_ty, false, None, source, output);
         }
     }
 }
@@ -1246,7 +1247,7 @@ impl<'v> RootCollector<'_, 'v> {
                     debug!("RootCollector: ADT drop-glue for `{id:?}`",);
 
                     let ty = self.tcx.type_of(id.owner_id.to_def_id()).no_bound_vars().unwrap();
-                    visit_drop_use(self.tcx, ty, None, DUMMY_SP, self.output);
+                    visit_drop_use(self.tcx, ty, true, None, DUMMY_SP, self.output);
                 }
             }
             DefKind::GlobalAsm => {
