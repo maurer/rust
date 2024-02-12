@@ -46,7 +46,7 @@ fn make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'
 
             build_call_shim(tcx, instance, Some(adjustment), CallKind::Indirect(ty))
         }
-        ty::InstanceDef::CfiShim(def_id, _ty) => {
+        ty::InstanceDef::CfiShim { def_id, .. } => {
             build_call_shim(tcx, instance, Some(Adjustment::Identity), CallKind::Direct(def_id))
         }
         // We are generating a call back to our def-id, which the
@@ -724,17 +724,24 @@ fn build_call_shim<'tcx>(
     // `FnPtrShim` contains the fn pointer type that a call shim is being built for - this is used
     // to substitute into the signature of the shim. It is not necessary for users of this
     // MIR body to perform further substitutions (see `InstanceDef::has_polymorphic_mir_body`).
-    let (sig_args, untuple_args) = if let ty::InstanceDef::FnPtrShim(_, ty) = instance {
-        let sig = tcx.instantiate_bound_regions_with_erased(ty.fn_sig(tcx));
+    let (sig_args, untuple_args, call_args) = match instance {
+        ty::InstanceDef::FnPtrShim(_, ty) => {
+            let sig = tcx.instantiate_bound_regions_with_erased(ty.fn_sig(tcx));
 
-        let untuple_args = sig.inputs();
+            let untuple_args = sig.inputs();
 
-        // Create substitutions for the `Self` and `Args` generic parameters of the shim body.
-        let arg_tup = Ty::new_tup(tcx, untuple_args);
+            // Create substitutions for the `Self` and `Args` generic parameters of the shim body.
+            let arg_tup = Ty::new_tup(tcx, untuple_args);
 
-        (Some([ty.into(), arg_tup.into()]), Some(untuple_args))
-    } else {
-        (None, None)
+            (Some(tcx.mk_args(&[ty.into(), arg_tup.into()])), Some(untuple_args), None)
+        }
+        ty::InstanceDef::CfiShim { args, invoke_ty, .. } => {
+            // FIXME can I avoid vec here?
+            let sig_vec: Vec<_> = std::iter::once(invoke_ty.into()).chain(args.iter().skip(1)).collect();
+            let sig_args = tcx.mk_args(sig_vec.as_slice());
+            (Some(sig_args), None, Some(args))
+        }
+        _ => (None, None, None)
     };
 
     let def_id = instance.def_id();
@@ -787,10 +794,10 @@ fn build_call_shim<'tcx>(
     }
 
     // FIXME as above, this logic is also in `Instance::ty`
-    if let ty::InstanceDef::CfiShim(_, ty) = instance {
+    if let ty::InstanceDef::CfiShim { invoke_ty, .. } = instance {
         // Modify fn(&self) to fn(&dyn Trait)
         let mut inputs_and_output = sig.inputs_and_output.to_vec();
-        inputs_and_output[0] = ty;
+        inputs_and_output[0] = invoke_ty;
         sig.inputs_and_output = tcx.mk_type_list(&inputs_and_output);
     }
 
@@ -841,7 +848,11 @@ fn build_call_shim<'tcx>(
 
         // `FnDef` call with optional receiver.
         CallKind::Direct(def_id) => {
-            let ty = tcx.type_of(def_id).instantiate_identity();
+            let ty = if let Some(call_args) = call_args {
+                tcx.type_of(def_id).instantiate(tcx, call_args)
+            } else {
+                tcx.type_of(def_id).instantiate_identity()
+            };
             (
                 Operand::Constant(Box::new(ConstOperand {
                     span,

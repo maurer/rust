@@ -174,7 +174,7 @@ impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> InterpCx<'mir, 'tcx, M> {
                 let frame = self.frame();
                 let ty = place.ty(&frame.body.local_decls, *self.tcx).ty;
                 let ty = self.subst_from_frame_and_normalize_erasing_regions(frame, ty)?;
-                let instance = Instance::resolve_drop_in_place(*self.tcx, ty);
+                let instance = Instance::resolve_drop_in_place(*self.tcx, ty, None);
                 if let ty::InstanceDef::DropGlue(_, None) = instance.def {
                     // This is the branch we enter if and only if the dropped type has no drop glue
                     // whatsoever. This can happen as a result of monomorphizing a drop of a
@@ -547,7 +547,7 @@ impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> InterpCx<'mir, 'tcx, M> {
             | ty::InstanceDef::CloneShim(..)
             | ty::InstanceDef::FnPtrAddrShim(..)
             | ty::InstanceDef::ThreadLocalShim(..)
-            | ty::InstanceDef::CfiShim(..)
+            | ty::InstanceDef::CfiShim { .. }
             | ty::InstanceDef::Item(_) => {
                 // We need MIR for this fn
                 let Some((body, instance)) = M::find_mir_or_eval_fn(
@@ -938,12 +938,12 @@ impl<'mir, 'tcx: 'mir, M: Machine<'mir, 'tcx>> InterpCx<'mir, 'tcx, M> {
             _ => {
                 debug_assert_eq!(
                     instance,
-                    ty::Instance::resolve_drop_in_place(*self.tcx, place.layout.ty)
+                    ty::Instance::resolve_drop_in_place(*self.tcx, place.layout.ty, None)
                 );
                 place
             }
         };
-        let instance = ty::Instance::resolve_drop_in_place(*self.tcx, place.layout.ty);
+        let instance = ty::Instance::resolve_drop_in_place(*self.tcx, place.layout.ty, None);
         let fn_abi = self.fn_abi_of_instance(instance, ty::List::empty())?;
 
         let arg = self.mplace_to_ref(&place)?;

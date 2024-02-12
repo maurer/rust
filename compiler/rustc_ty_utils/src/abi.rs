@@ -304,6 +304,7 @@ fn fn_sig_for_fn_abi<'tcx>(
             };
             ty::Binder::bind_with_vars(fn_sig, bound_vars)
         }
+        ty::FnPtr(sig) => sig,
         _ => bug!("unexpected type {:?} in Instance::fn_sig", ty),
     }
 }
@@ -367,13 +368,19 @@ fn fn_abi_of_instance<'tcx>(
     let caller_location =
         instance.def.requires_caller_location(tcx).then(|| tcx.caller_location_ty());
 
+    // FIXME maybe make this a method on InstanceDef?
+    let force_thin = match instance.def {
+        ty::InstanceDef::Virtual(..) | ty::InstanceDef::CfiShim { .. } => true,
+        _ => false,
+    };
+
     fn_abi_new_uncached(
         &LayoutCx { tcx, param_env },
         sig,
         extra_args,
         caller_location,
         Some(instance.def_id()),
-        matches!(instance.def, ty::InstanceDef::Virtual(..)),
+        force_thin,
     )
 }
 

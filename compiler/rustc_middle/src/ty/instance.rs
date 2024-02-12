@@ -138,7 +138,7 @@ pub enum InstanceDef<'tcx> {
 
     /// Shim generated for the sake of CFI which replaces the receiver with the
     /// provided type.
-    CfiShim(DefId, Ty<'tcx>),
+    CfiShim { def_id: DefId, args: GenericArgsRef<'tcx>, invoke_ty: Ty<'tcx> },
 }
 
 impl<'tcx> Instance<'tcx> {
@@ -147,7 +147,7 @@ impl<'tcx> Instance<'tcx> {
     pub fn ty(&self, tcx: TyCtxt<'tcx>, param_env: ty::ParamEnv<'tcx>) -> Ty<'tcx> {
         let ty = tcx.type_of(self.def.def_id());
         let mut ty = tcx.instantiate_and_normalize_erasing_regions(self.args, param_env, ty);
-        if let InstanceDef::CfiShim(_, invoke_ty) = self.def {
+        if let InstanceDef::CfiShim { invoke_ty, .. } = self.def {
             debug!("Rewriting CFI shim type {ty} using {invoke_ty}");
             let sig = ty.fn_sig(tcx).map_bound(|sig| {
                 tcx.mk_fn_sig(
@@ -217,7 +217,7 @@ impl<'tcx> InstanceDef<'tcx> {
             | InstanceDef::DropGlue(def_id, _)
             | InstanceDef::CloneShim(def_id, _)
             | InstanceDef::FnPtrAddrShim(def_id, _) => def_id,
-            InstanceDef::CfiShim(def_id, _) => def_id,
+            InstanceDef::CfiShim { def_id, .. } => def_id,
         }
     }
 
@@ -229,7 +229,7 @@ impl<'tcx> InstanceDef<'tcx> {
                 Some(def_id)
             }
             InstanceDef::VTableShim(..)
-            | InstanceDef::CfiShim(..)
+            | InstanceDef::CfiShim { .. }
             | InstanceDef::ReifyShim(..)
             | InstanceDef::FnPtrShim(..)
             | InstanceDef::Virtual(..)
@@ -330,7 +330,7 @@ impl<'tcx> InstanceDef<'tcx> {
             | InstanceDef::ThreadLocalShim(..)
             | InstanceDef::FnPtrAddrShim(..)
             | InstanceDef::FnPtrShim(..)
-            | InstanceDef::CfiShim(..)
+            | InstanceDef::CfiShim { .. }
             | InstanceDef::DropGlue(_, Some(_)) => false,
             InstanceDef::ClosureOnceShim { .. }
             | InstanceDef::ConstructCoroutineInClosureShim { .. }
@@ -378,7 +378,7 @@ fn fmt_instance(
         InstanceDef::DropGlue(_, Some(ty)) => write!(f, " - shim(Some({ty}))"),
         InstanceDef::CloneShim(_, ty) => write!(f, " - shim({ty})"),
         InstanceDef::FnPtrAddrShim(_, ty) => write!(f, " - shim({ty})"),
-        InstanceDef::CfiShim(_, ty) => write!(f, " - cfi-shim({ty})"),
+        InstanceDef::CfiShim { invoke_ty, .. } => write!(f, " - cfi-shim({invoke_ty})"),
     }
 }
 
@@ -595,10 +595,27 @@ impl<'tcx> Instance<'tcx> {
         }
     }
 
-    pub fn resolve_drop_in_place(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> ty::Instance<'tcx> {
+    pub fn resolve_drop_in_place(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>, invoke_ty: Option<Ty<'tcx>>) -> ty::Instance<'tcx> {
+        // FIXME validate that ignoring ty is safe here. I think it is, but...
+        // FIXME we want this on globally for testing first, but this should be
+        // conditional on CFI being enabled before putting it in
+        // FIXME need to turn it back to global to test before putting in
         let def_id = tcx.require_lang_item(LangItem::DropInPlace, None);
         let args = tcx.mk_args(&[ty.into()]);
-        Instance::expect_resolve(tcx, ty::ParamEnv::reveal_all(), def_id, args)
+        let cfi = tcx.sess.is_sanitizer_kcfi_enabled() || tcx.sess.is_sanitizer_cfi_enabled();
+        if let Some(invoke_ty) = invoke_ty && cfi {
+            Instance {
+                def: InstanceDef::CfiShim {
+                    def_id,
+                    args,
+                    invoke_ty,
+                },
+                // FIXME Do... we actually need the internal args on cfishim?
+                args,
+            }
+        } else {
+            Instance::expect_resolve(tcx, ty::ParamEnv::reveal_all(), def_id, args)
+        }
     }
 
     #[instrument(level = "debug", skip(tcx), ret)]

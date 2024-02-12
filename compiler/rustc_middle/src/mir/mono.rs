@@ -408,7 +408,7 @@ impl<'tcx> CodegenUnit<'tcx> {
                             | InstanceDef::CloneShim(..)
                             | InstanceDef::ThreadLocalShim(..)
                             | InstanceDef::FnPtrAddrShim(..)
-                            | InstanceDef::CfiShim(..) => None,
+                            | InstanceDef::CfiShim { .. } => None,
                         }
                     }
                     MonoItem::Static(def_id) => def_id.as_local().map(Idx::index),

@@ -805,7 +805,7 @@ impl<'tcx> Stable<'tcx> for ty::Instance<'tcx> {
             | ty::InstanceDef::DropGlue(..)
             | ty::InstanceDef::CloneShim(..)
             | ty::InstanceDef::FnPtrShim(..)
-            | ty::InstanceDef::CfiShim(..) => stable_mir::mir::mono::InstanceKind::Shim,
+            | ty::InstanceDef::CfiShim { .. } => stable_mir::mir::mono::InstanceKind::Shim,
         };
         stable_mir::mir::mono::Instance { def, kind }
     }

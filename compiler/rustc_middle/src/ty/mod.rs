@@ -1686,7 +1686,7 @@ impl<'tcx> TyCtxt<'tcx> {
             | ty::InstanceDef::CloneShim(..)
             | ty::InstanceDef::ThreadLocalShim(..)
             | ty::InstanceDef::FnPtrAddrShim(..)
-            | ty::InstanceDef::CfiShim(..) => self.mir_shims(instance),
+            | ty::InstanceDef::CfiShim { .. } => self.mir_shims(instance),
         }
     }
 

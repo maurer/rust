@@ -352,10 +352,13 @@ macro_rules! make_mir_visitor {
                         ty::InstanceDef::FnPtrShim(_def_id, ty) |
                         ty::InstanceDef::DropGlue(_def_id, Some(ty)) |
                         ty::InstanceDef::CloneShim(_def_id, ty) |
-                        ty::InstanceDef::FnPtrAddrShim(_def_id, ty) |
-                        ty::InstanceDef::CfiShim(_def_id, ty) => {
+                        ty::InstanceDef::FnPtrAddrShim(_def_id, ty) => {
                             // FIXME(eddyb) use a better `TyContext` here.
                             self.visit_ty($(& $mutability)? *ty, TyContext::Location(location));
+                        }
+                        ty::InstanceDef::CfiShim { def_id: _, args, invoke_ty } => {
+                            self.visit_ty($(& $mutability)? *invoke_ty, TyContext::Location(location));
+                            self.visit_args(args, location);
                         }
                     }
                     self.visit_args(callee_args, location);
