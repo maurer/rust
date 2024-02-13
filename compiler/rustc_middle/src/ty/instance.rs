@@ -1,7 +1,7 @@
 use crate::middle::codegen_fn_attrs::CodegenFnAttrFlags;
 use crate::ty::print::{FmtPrinter, Printer};
 use crate::ty::{self, Ty, TyCtxt, TypeFoldable, TypeSuperFoldable};
-use crate::ty::{EarlyBinder, GenericArgs, GenericArgsRef, TypeVisitableExt};
+use crate::ty::{EarlyBinder, GenericArgs, GenericArgsRef, Lift, TypeVisitableExt};
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir as hir;
 use rustc_hir::def::Namespace;
@@ -138,15 +138,18 @@ pub enum InstanceDef<'tcx> {
 
     /// Shim generated for the sake of CFI which replaces the receiver with the
     /// provided type.
-    CfiShim { def_id: DefId, args: GenericArgsRef<'tcx>, invoke_ty: Ty<'tcx> },
+    CfiShim { target_instance: &'tcx InstanceDef<'tcx>, invoke_ty: Ty<'tcx> },
 }
 
 impl<'tcx> Instance<'tcx> {
     /// Returns the `Ty` corresponding to this `Instance`, with generic substitutions applied and
     /// lifetimes erased, allowing a `ParamEnv` to be specified for use during normalization.
     pub fn ty(&self, tcx: TyCtxt<'tcx>, param_env: ty::ParamEnv<'tcx>) -> Ty<'tcx> {
-        let ty = tcx.type_of(self.def.def_id());
-        let mut ty = tcx.instantiate_and_normalize_erasing_regions(self.args, param_env, ty);
+        let ty = tcx.instantiate_and_normalize_erasing_regions(
+            self.args,
+            param_env,
+            tcx.type_of(self.def.def_id()),
+        );
         if let InstanceDef::CfiShim { invoke_ty, .. } = self.def {
             debug!("Rewriting CFI shim type {ty} using {invoke_ty}");
             let sig = ty.fn_sig(tcx).map_bound(|sig| {
@@ -159,10 +162,12 @@ impl<'tcx> Instance<'tcx> {
                     sig.abi,
                 )
             });
-            ty = Ty::new_fn_ptr(tcx, sig);
+            let ty = Ty::new_fn_ptr(tcx, sig);
             debug!("Transformed to {ty}");
+            ty
+        } else {
+            ty
         }
-        ty
     }
 
     /// Finds a crate that contains a monomorphization of this instance that
@@ -218,7 +223,7 @@ impl<'tcx> InstanceDef<'tcx> {
             | InstanceDef::DropGlue(def_id, _)
             | InstanceDef::CloneShim(def_id, _)
             | InstanceDef::FnPtrAddrShim(def_id, _) => def_id,
-            InstanceDef::CfiShim { def_id, .. } => def_id,
+            InstanceDef::CfiShim { target_instance, .. } => target_instance.def_id(),
         }
     }
 
@@ -608,22 +613,18 @@ impl<'tcx> Instance<'tcx> {
         let def_id = tcx.require_lang_item(LangItem::DropInPlace, None);
         let args = tcx.mk_args(&[ty.into()]);
         let cfi = tcx.sess.is_sanitizer_kcfi_enabled() || tcx.sess.is_sanitizer_cfi_enabled();
-        let instance = Instance::expect_resolve(tcx, ty::ParamEnv::reveal_all(), def_id, args);
+        let mut instance = Instance::expect_resolve(tcx, ty::ParamEnv::reveal_all(), def_id, args);
         if let Some(invoke_ty) = invoke_ty
             && cfi
         {
-            Instance {
-                def: InstanceDef::CfiShim {
-                    def_id: instance.def.def_id(),
-                    args: instance.args,
-                    invoke_ty
-                },
-                // FIXME Do... we actually need the internal args on cfishim?
-                args: instance.args,
-            }
-        } else {
-            instance
+            instance.def = InstanceDef::CfiShim {
+                target_instance: (&instance.def)
+                    .lift_to_tcx(tcx)
+                    .expect("Could not lift for shimming"),
+                invoke_ty,
+            };
         }
+        instance
     }
 
     #[instrument(level = "debug", skip(tcx), ret)]

@@ -1330,12 +1330,15 @@ impl<'tcx> Ty<'tcx> {
         // FIXME this doesn't cover arbitrary_self_types. It's possible we should
         // suppress error here if arbitrary_self_types is added.
         match self.kind() {
-            ty::Ref(region, _, mutbl) => return Ty::new_ref(tcx, *region, ty::TypeAndMut { ty, mutbl: *mutbl }),
-            ty::RawPtr(ty::TypeAndMut { mutbl, .. }) =>
-                return Ty::new_ptr(tcx, ty::TypeAndMut { ty, mutbl: *mutbl }),
+            ty::Ref(region, _, mutbl) => {
+                return Ty::new_ref(tcx, *region, ty::TypeAndMut { ty, mutbl: *mutbl });
+            }
+            ty::RawPtr(ty::TypeAndMut { mutbl, .. }) => {
+                return Ty::new_ptr(tcx, ty::TypeAndMut { ty, mutbl: *mutbl });
+            }
             ty::Adt(def, orig_args) => {
                 if def.is_box() {
-                    return Ty::new_adt(tcx, *def, tcx.mk_args(&[ty.into()]))
+                    return Ty::new_adt(tcx, *def, tcx.mk_args(&[ty.into()]));
                 }
                 if def.did() == tcx.require_lang_item(LangItem::Pin, None) {
                     // Pin<P> is valid if P is a valid recevier, so recurse.

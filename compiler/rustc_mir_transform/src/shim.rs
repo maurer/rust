@@ -23,10 +23,18 @@ use rustc_middle::mir::patch::MirPatch;
 use rustc_mir_dataflow::elaborate_drops::{self, DropElaborator, DropFlagMode, DropStyle};
 
 pub fn provide(providers: &mut Providers) {
-    providers.mir_shims = make_shim;
+    providers.mir_shims = make_shim_provider;
 }
 
-fn make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'tcx> {
+fn make_shim_provider<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'tcx> {
+    make_shim(tcx, instance, false)
+}
+
+fn make_shim<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    instance: ty::InstanceDef<'tcx>,
+    skip_passes: bool,
+) -> Body<'tcx> {
     debug!("make_shim({:?})", instance);
 
     let mut result = match instance {
@@ -46,8 +54,12 @@ fn make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'
 
             build_call_shim(tcx, instance, Some(adjustment), CallKind::Indirect(ty))
         }
-        ty::InstanceDef::CfiShim { def_id, .. } => {
-            build_call_shim(tcx, instance, Some(Adjustment::Identity), CallKind::Direct(def_id))
+        ty::InstanceDef::CfiShim { target_instance, invoke_ty } => {
+            let mut target_body = make_shim(tcx, *target_instance, true);
+            //FIXME add error reporting around invariant violations
+            let receiver_ty = &mut target_body.local_decls[Local::from_usize(1)].ty;
+            *receiver_ty = receiver_ty.rewrite_receiver(tcx, invoke_ty);
+            target_body
         }
         // We are generating a call back to our def-id, which the
         // codegen backend knows to turn to an actual call, be it
@@ -168,6 +180,11 @@ fn make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'
         }
     };
     debug!("make_shim({:?}) = untransformed {:?}", instance, result);
+
+    if skip_passes {
+        debug!("make_shim(skip_passes = true), returning");
+        return result;
+    }
 
     // We don't validate MIR here because the shims may generate code that's
     // only valid in a reveal-all param-env. However, since we do initial
@@ -724,7 +741,7 @@ fn build_call_shim<'tcx>(
     // `FnPtrShim` contains the fn pointer type that a call shim is being built for - this is used
     // to substitute into the signature of the shim. It is not necessary for users of this
     // MIR body to perform further substitutions (see `InstanceDef::has_polymorphic_mir_body`).
-    let (sig_args, untuple_args, call_args) = match instance {
+    let (sig_args, untuple_args) = match instance {
         ty::InstanceDef::FnPtrShim(_, ty) => {
             let sig = tcx.instantiate_bound_regions_with_erased(ty.fn_sig(tcx));
 
@@ -733,18 +750,9 @@ fn build_call_shim<'tcx>(
             // Create substitutions for the `Self` and `Args` generic parameters of the shim body.
             let arg_tup = Ty::new_tup(tcx, untuple_args);
 
-            (Some(tcx.mk_args(&[ty.into(), arg_tup.into()])), Some(untuple_args), None)
+            (Some(tcx.mk_args(&[ty.into(), arg_tup.into()])), Some(untuple_args))
         }
-        ty::InstanceDef::CfiShim { args, invoke_ty, .. } => {
-            // FIXME this is only working the only polymorphic shim happens to take
-            // self as the first argument
-            // FIXME can I avoid vec here?
-            let sig_vec: Vec<_> =
-                std::iter::once(invoke_ty.into()).chain(args.iter().skip(1)).collect();
-            let sig_args = tcx.mk_args(sig_vec.as_slice());
-            (Some(sig_args), None, Some(args))
-        }
-        _ => (None, None, None),
+        _ => (None, None),
     };
 
     let def_id = instance.def_id();
@@ -851,11 +859,7 @@ fn build_call_shim<'tcx>(
 
         // `FnDef` call with optional receiver.
         CallKind::Direct(def_id) => {
-            let ty = if let Some(call_args) = call_args {
-                tcx.type_of(def_id).instantiate(tcx, call_args)
-            } else {
-                tcx.type_of(def_id).instantiate_identity()
-            };
+            let ty = tcx.type_of(def_id).instantiate_identity();
             (
                 Operand::Constant(Box::new(ConstOperand {
                     span,
