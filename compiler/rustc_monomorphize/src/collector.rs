@@ -1203,16 +1203,16 @@ fn create_mono_items_for_vtable_methods<'tcx>(
                 .map(|item| create_fn_mono_item(tcx, item, source));
             output.extend(methods);
 
-            let pep: ty::PolyExistentialPredicate<'tcx> =                         
-                principal.map_bound(ty::ExistentialPredicate::Trait);            
+            let pep: ty::PolyExistentialPredicate<'tcx> =
+                principal.map_bound(ty::ExistentialPredicate::Trait);
             let existential_predicates = tcx.mk_poly_existential_predicates(&[pep]);
-            let d = Ty::new_dynamic(tcx, existential_predicates, tcx.lifetimes.re_erased, ty::Dyn);                                                                       
+            let d = Ty::new_dynamic(tcx, existential_predicates, tcx.lifetimes.re_erased, ty::Dyn);
             Some(Ty::new_mut_ptr(tcx, d))
         } else {
             None
         };
 
-        // Also add the destructor 
+        // Also add the destructor
         visit_drop_use(tcx, impl_ty, invoke_ty, false, source, output);
     }
 }

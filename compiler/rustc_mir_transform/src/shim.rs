@@ -737,11 +737,12 @@ fn build_call_shim<'tcx>(
         }
         ty::InstanceDef::CfiShim { args, invoke_ty, .. } => {
             // FIXME can I avoid vec here?
-            let sig_vec: Vec<_> = std::iter::once(invoke_ty.into()).chain(args.iter().skip(1)).collect();
+            let sig_vec: Vec<_> =
+                std::iter::once(invoke_ty.into()).chain(args.iter().skip(1)).collect();
             let sig_args = tcx.mk_args(sig_vec.as_slice());
             (Some(sig_args), None, Some(args))
         }
-        _ => (None, None, None)
+        _ => (None, None, None),
     };
 
     let def_id = instance.def_id();

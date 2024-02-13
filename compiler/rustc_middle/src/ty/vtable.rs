@@ -79,15 +79,13 @@ pub(super) fn vtable_allocation_provider<'tcx>(
     // allocation is correctly aligned as we created it above. Also we're only offsetting by
     // multiples of `ptr_align`, which means that it will stay aligned to `ptr_align`.
 
-    let drop_invoke_ty =
-            poly_trait_ref.map(|poly_trait_ref| {
-                let pep: ty::PolyExistentialPredicate<'tcx> =
-                    poly_trait_ref.map_bound(ty::ExistentialPredicate::Trait);
-                let existential_predicates = tcx.mk_poly_existential_predicates(&[pep]);
-                let d =
-                    Ty::new_dynamic(tcx, existential_predicates, tcx.lifetimes.re_erased, ty::Dyn);
-                Ty::new_mut_ptr(tcx, d)
-            });
+    let drop_invoke_ty = poly_trait_ref.map(|poly_trait_ref| {
+        let pep: ty::PolyExistentialPredicate<'tcx> =
+            poly_trait_ref.map_bound(ty::ExistentialPredicate::Trait);
+        let existential_predicates = tcx.mk_poly_existential_predicates(&[pep]);
+        let d = Ty::new_dynamic(tcx, existential_predicates, tcx.lifetimes.re_erased, ty::Dyn);
+        Ty::new_mut_ptr(tcx, d)
+    });
 
     for (idx, entry) in vtable_entries.iter().enumerate() {
         let idx: u64 = u64::try_from(idx).unwrap();

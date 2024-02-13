@@ -595,7 +595,11 @@ impl<'tcx> Instance<'tcx> {
         }
     }
 
-    pub fn resolve_drop_in_place(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>, invoke_ty: Option<Ty<'tcx>>) -> ty::Instance<'tcx> {
+    pub fn resolve_drop_in_place(
+        tcx: TyCtxt<'tcx>,
+        ty: Ty<'tcx>,
+        invoke_ty: Option<Ty<'tcx>>,
+    ) -> ty::Instance<'tcx> {
         // FIXME validate that ignoring ty is safe here. I think it is, but...
         // FIXME we want this on globally for testing first, but this should be
         // conditional on CFI being enabled before putting it in
@@ -603,13 +607,11 @@ impl<'tcx> Instance<'tcx> {
         let def_id = tcx.require_lang_item(LangItem::DropInPlace, None);
         let args = tcx.mk_args(&[ty.into()]);
         let cfi = tcx.sess.is_sanitizer_kcfi_enabled() || tcx.sess.is_sanitizer_cfi_enabled();
-        if let Some(invoke_ty) = invoke_ty && cfi {
+        if let Some(invoke_ty) = invoke_ty
+            && cfi
+        {
             Instance {
-                def: InstanceDef::CfiShim {
-                    def_id,
-                    args,
-                    invoke_ty,
-                },
+                def: InstanceDef::CfiShim { def_id, args, invoke_ty },
                 // FIXME Do... we actually need the internal args on cfishim?
                 args,
             }
