@@ -15,6 +15,7 @@ use rustc_errors::ErrorGuaranteed;
 use rustc_hir as hir;
 use rustc_hir::def::{CtorOf, DefKind, Res};
 use rustc_hir::def_id::{CrateNum, DefId, LocalDefId};
+use rustc_hir::lang_items::LangItem;
 use rustc_index::bit_set::GrowableBitSet;
 use rustc_macros::HashStable;
 use rustc_session::Limit;
@@ -1321,6 +1322,41 @@ impl<'tcx> Ty<'tcx> {
     #[inline]
     pub fn outer_exclusive_binder(self) -> ty::DebruijnIndex {
         self.0.outer_exclusive_binder
+    }
+
+    /// Assumes this is a legal receiver, replaces the Self type with
+    /// the one provided
+    pub fn rewrite_receiver(self, tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Self {
+        // FIXME this doesn't cover arbitrary_self_types. It's possible we should
+        // suppress error here if arbitrary_self_types is added.
+        match self.kind() {
+            ty::Ref(region, _, mutbl) => return Ty::new_ref(tcx, *region, ty::TypeAndMut { ty, mutbl: *mutbl }),
+            ty::RawPtr(ty::TypeAndMut { mutbl, .. }) =>
+                return Ty::new_ptr(tcx, ty::TypeAndMut { ty, mutbl: *mutbl }),
+            ty::Adt(def, orig_args) => {
+                if def.is_box() {
+                    return Ty::new_adt(tcx, *def, tcx.mk_args(&[ty.into()]))
+                }
+                if def.did() == tcx.require_lang_item(LangItem::Pin, None) {
+                    // Pin<P> is valid if P is a valid recevier, so recurse.
+                    let pin_ty = orig_args.type_at(0);
+                    let args = tcx.mk_args(&[pin_ty.rewrite_receiver(tcx, ty).into()]);
+                    return Ty::new_adt(tcx, *def, args);
+                }
+                // FIXME This isn't gauranteed to work by the trait, but happens to
+                // for the stabilized values, Box, Rc, Arc
+                // FIXME This should also check deref, but all existing receivers do
+                // that too
+                let receiver = tcx.require_lang_item(LangItem::Receiver, None);
+                let mut has_receiver_impl = false;
+                tcx.for_each_relevant_impl(receiver, self, |_| has_receiver_impl = true);
+                if has_receiver_impl {
+                    return Ty::new_adt(tcx, *def, tcx.mk_args(&[ty.into()]));
+                }
+            }
+            _ => (),
+        }
+        bug!("Tried to rewrite receiver on a non-receiver type: {self}")
     }
 }
 

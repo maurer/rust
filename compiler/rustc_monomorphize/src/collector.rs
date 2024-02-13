@@ -1206,8 +1206,7 @@ fn create_mono_items_for_vtable_methods<'tcx>(
             let pep: ty::PolyExistentialPredicate<'tcx> =
                 principal.map_bound(ty::ExistentialPredicate::Trait);
             let existential_predicates = tcx.mk_poly_existential_predicates(&[pep]);
-            let d = Ty::new_dynamic(tcx, existential_predicates, tcx.lifetimes.re_erased, ty::Dyn);
-            Some(Ty::new_mut_ptr(tcx, d))
+            Some(Ty::new_dynamic(tcx, existential_predicates, tcx.lifetimes.re_erased, ty::Dyn))
         } else {
             None
         };

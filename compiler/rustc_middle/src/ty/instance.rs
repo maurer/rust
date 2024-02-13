@@ -150,8 +150,9 @@ impl<'tcx> Instance<'tcx> {
         if let InstanceDef::CfiShim { invoke_ty, .. } = self.def {
             debug!("Rewriting CFI shim type {ty} using {invoke_ty}");
             let sig = ty.fn_sig(tcx).map_bound(|sig| {
+                let receiver = sig.inputs()[0].rewrite_receiver(tcx, invoke_ty);
                 tcx.mk_fn_sig(
-                    std::iter::once(invoke_ty).chain(sig.inputs().into_iter().skip(1).copied()),
+                    std::iter::once(receiver).chain(sig.inputs().into_iter().skip(1).copied()),
                     sig.output(),
                     sig.c_variadic,
                     sig.unsafety,
@@ -607,16 +608,21 @@ impl<'tcx> Instance<'tcx> {
         let def_id = tcx.require_lang_item(LangItem::DropInPlace, None);
         let args = tcx.mk_args(&[ty.into()]);
         let cfi = tcx.sess.is_sanitizer_kcfi_enabled() || tcx.sess.is_sanitizer_cfi_enabled();
+        let instance = Instance::expect_resolve(tcx, ty::ParamEnv::reveal_all(), def_id, args);
         if let Some(invoke_ty) = invoke_ty
             && cfi
         {
             Instance {
-                def: InstanceDef::CfiShim { def_id, args, invoke_ty },
+                def: InstanceDef::CfiShim {
+                    def_id: instance.def.def_id(),
+                    args: instance.args,
+                    invoke_ty
+                },
                 // FIXME Do... we actually need the internal args on cfishim?
-                args,
+                args: instance.args,
             }
         } else {
-            Instance::expect_resolve(tcx, ty::ParamEnv::reveal_all(), def_id, args)
+            instance
         }
     }
 

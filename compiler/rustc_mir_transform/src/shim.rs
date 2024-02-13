@@ -736,6 +736,8 @@ fn build_call_shim<'tcx>(
             (Some(tcx.mk_args(&[ty.into(), arg_tup.into()])), Some(untuple_args), None)
         }
         ty::InstanceDef::CfiShim { args, invoke_ty, .. } => {
+            // FIXME this is only working the only polymorphic shim happens to take
+            // self as the first argument
             // FIXME can I avoid vec here?
             let sig_vec: Vec<_> =
                 std::iter::once(invoke_ty.into()).chain(args.iter().skip(1)).collect();
@@ -798,7 +800,7 @@ fn build_call_shim<'tcx>(
     if let ty::InstanceDef::CfiShim { invoke_ty, .. } = instance {
         // Modify fn(&self) to fn(&dyn Trait)
         let mut inputs_and_output = sig.inputs_and_output.to_vec();
-        inputs_and_output[0] = invoke_ty;
+        inputs_and_output[0] = inputs_and_output[0].rewrite_receiver(tcx, invoke_ty);
         sig.inputs_and_output = tcx.mk_type_list(&inputs_and_output);
     }
 
