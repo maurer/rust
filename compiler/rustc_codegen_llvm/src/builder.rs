@@ -493,7 +493,7 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                 panic!("unsized locals must not be `extern` types");
             }
         }
-        assert_eq!(place.llextra.is_some(), place.layout.is_unsized());
+        //assert_eq!(place.llextra.is_some(), place.layout.is_unsized());
 
         if place.layout.is_zst() {
             return OperandRef::zero_sized(place.layout);

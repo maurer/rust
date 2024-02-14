@@ -120,4 +120,7 @@ macro_rules! arena_types {
     )
 }
 
+// FIXME probably don't need the explicit arena zone sinze it's copy? That may be why I had to say
+// IsCopy explicitly
+
 arena_types!(rustc_arena::declare_arena);

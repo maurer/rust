@@ -1179,9 +1179,20 @@ fn create_mono_items_for_vtable_methods<'tcx>(
     assert!(!trait_ty.has_escaping_bound_vars() && !impl_ty.has_escaping_bound_vars());
 
     if let ty::Dynamic(trait_ty, ..) = trait_ty.kind() {
+        // FIXME there's probably a simpler control flow for this
         let invoke_ty = if let Some(principal) = trait_ty.principal() {
             let poly_trait_ref = principal.with_self_ty(tcx, impl_ty);
             assert!(!poly_trait_ref.has_escaping_bound_vars());
+
+            let pep: ty::PolyExistentialPredicate<'tcx> =
+                principal.map_bound(ty::ExistentialPredicate::Trait);
+            let existential_predicates = tcx.mk_poly_existential_predicates(&[pep]);
+            let invoke_ty = Some(Ty::new_dynamic(
+                tcx,
+                existential_predicates,
+                tcx.lifetimes.re_erased,
+                ty::Dyn,
+            ));
 
             // Walk all methods of the trait, including those of its supertraits
             let entries = tcx.vtable_entries(poly_trait_ref);
@@ -1197,16 +1208,16 @@ fn create_mono_items_for_vtable_methods<'tcx>(
                         None
                     }
                     VtblEntry::Method(instance) => {
-                        Some(*instance).filter(|instance| should_codegen_locally(tcx, instance))
+                        //Some(instance.cfi_shim(tcx, invoke_ty)).filter(|instance| should_codegen_locally(tcx, instance))
+                        Some(*instance)
+                            .filter(|instance| should_codegen_locally(tcx, instance))
+                            .map(|instance| instance.cfi_shim(tcx, invoke_ty))
                     }
                 })
                 .map(|item| create_fn_mono_item(tcx, item, source));
             output.extend(methods);
 
-            let pep: ty::PolyExistentialPredicate<'tcx> =
-                principal.map_bound(ty::ExistentialPredicate::Trait);
-            let existential_predicates = tcx.mk_poly_existential_predicates(&[pep]);
-            Some(Ty::new_dynamic(tcx, existential_predicates, tcx.lifetimes.re_erased, ty::Dyn))
+            invoke_ty
         } else {
             None
         };

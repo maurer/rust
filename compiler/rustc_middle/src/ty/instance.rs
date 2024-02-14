@@ -151,16 +151,30 @@ impl<'tcx> Instance<'tcx> {
             tcx.type_of(self.def.def_id()),
         );
         if let InstanceDef::CfiShim { invoke_ty, .. } = self.def {
+            use rustc_target::spec::abi::Abi;
+
             debug!("Rewriting CFI shim type {ty} using {invoke_ty}");
-            let sig = ty.fn_sig(tcx).map_bound(|sig| {
-                let receiver = sig.inputs()[0].rewrite_receiver(tcx, invoke_ty);
-                tcx.mk_fn_sig(
-                    std::iter::once(receiver).chain(sig.inputs().into_iter().skip(1).copied()),
-                    sig.output(),
-                    sig.c_variadic,
-                    sig.unsafety,
-                    sig.abi,
-                )
+            let base_sig = match ty.kind() {
+                ty::Closure(_, args) => args.as_closure().sig(),
+                _ => ty.fn_sig(tcx),
+            };
+            debug!("base_sig: {base_sig:?}:");
+            let sig = base_sig.map_bound(|sig| {
+                if sig.abi == Abi::RustCall {
+                    let receiver = Ty::new_ptr(
+                        tcx,
+                        ty::TypeAndMut { ty: invoke_ty, mutbl: ty::Mutability::Mut },
+                    );
+                    let inputs = std::iter::once(receiver).chain(sig.inputs().into_iter().copied());
+                    tcx.mk_fn_sig(inputs, sig.output(), sig.c_variadic, sig.unsafety, sig.abi)
+                } else {
+                    let receiver = sig.inputs()[0].rewrite_receiver(tcx, invoke_ty);
+                    let inputs =
+                        std::iter::once(receiver).chain(sig.inputs().into_iter().skip(1).copied());
+                    // This is repeated because our iterators are different types, so we can't just
+                    // assign back to an upper-scope `inputs`
+                    tcx.mk_fn_sig(inputs, sig.output(), sig.c_variadic, sig.unsafety, sig.abi)
+                }
             });
             let ty = Ty::new_fn_ptr(tcx, sig);
             debug!("Transformed to {ty}");
@@ -336,7 +350,6 @@ impl<'tcx> InstanceDef<'tcx> {
             | InstanceDef::ThreadLocalShim(..)
             | InstanceDef::FnPtrAddrShim(..)
             | InstanceDef::FnPtrShim(..)
-            | InstanceDef::CfiShim { .. }
             | InstanceDef::DropGlue(_, Some(_)) => false,
             InstanceDef::ClosureOnceShim { .. }
             | InstanceDef::ConstructCoroutineInClosureShim { .. }
@@ -347,6 +360,9 @@ impl<'tcx> InstanceDef<'tcx> {
             | InstanceDef::ReifyShim(..)
             | InstanceDef::Virtual(..)
             | InstanceDef::VTableShim(..) => true,
+            InstanceDef::CfiShim { target_instance, .. } => {
+                target_instance.has_polymorphic_mir_body()
+            }
         }
     }
 }
@@ -601,30 +617,39 @@ impl<'tcx> Instance<'tcx> {
         }
     }
 
+    // FIXME since there are few enouch callsites that provide invoke_ty, reduce
+    // noise here by going to those callsites and adding `.cfi_shim()` there instead
     pub fn resolve_drop_in_place(
         tcx: TyCtxt<'tcx>,
         ty: Ty<'tcx>,
         invoke_ty: Option<Ty<'tcx>>,
     ) -> ty::Instance<'tcx> {
-        // FIXME validate that ignoring ty is safe here. I think it is, but...
-        // FIXME we want this on globally for testing first, but this should be
-        // conditional on CFI being enabled before putting it in
-        // FIXME need to turn it back to global to test before putting in
         let def_id = tcx.require_lang_item(LangItem::DropInPlace, None);
         let args = tcx.mk_args(&[ty.into()]);
+        Instance::expect_resolve(tcx, ty::ParamEnv::reveal_all(), def_id, args)
+            .cfi_shim(tcx, invoke_ty)
+    }
+
+    pub fn cfi_shim(
+        mut self,
+        tcx: TyCtxt<'tcx>,
+        invoke_ty: Option<Ty<'tcx>>,
+    ) -> ty::Instance<'tcx> {
+        // FIXME suppressed shimming for closures
+        if tcx.is_closure_or_coroutine(self.def.def_id()) {
+            return self;
+        }
+        // FIXME do a final test run where shimming is forced on for everything
         let cfi = tcx.sess.is_sanitizer_kcfi_enabled() || tcx.sess.is_sanitizer_cfi_enabled();
-        let mut instance = Instance::expect_resolve(tcx, ty::ParamEnv::reveal_all(), def_id, args);
         if let Some(invoke_ty) = invoke_ty
             && cfi
         {
-            instance.def = InstanceDef::CfiShim {
-                target_instance: (&instance.def)
-                    .lift_to_tcx(tcx)
-                    .expect("Could not lift for shimming"),
+            self.def = InstanceDef::CfiShim {
+                target_instance: (&self.def).lift_to_tcx(tcx).expect("Could not lift for shimming"),
                 invoke_ty,
             };
         }
-        instance
+        self
     }
 
     #[instrument(level = "debug", skip(tcx), ret)]

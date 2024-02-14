@@ -23,20 +23,13 @@ use rustc_middle::mir::patch::MirPatch;
 use rustc_mir_dataflow::elaborate_drops::{self, DropElaborator, DropFlagMode, DropStyle};
 
 pub fn provide(providers: &mut Providers) {
-    providers.mir_shims = make_shim_provider;
+    providers.mir_shims = make_shim;
 }
 
-fn make_shim_provider<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'tcx> {
-    make_shim(tcx, instance, false)
-}
-
-fn make_shim<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    instance: ty::InstanceDef<'tcx>,
-    skip_passes: bool,
-) -> Body<'tcx> {
+fn make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'tcx> {
     debug!("make_shim({:?})", instance);
 
+    let mut skip_passes = false;
     let mut result = match instance {
         ty::InstanceDef::Item(..) => bug!("item {:?} passed to make_shim", instance),
         ty::InstanceDef::VTableShim(def_id) => {
@@ -55,7 +48,18 @@ fn make_shim<'tcx>(
             build_call_shim(tcx, instance, Some(adjustment), CallKind::Indirect(ty))
         }
         ty::InstanceDef::CfiShim { target_instance, invoke_ty } => {
-            let mut target_body = make_shim(tcx, *target_instance, true);
+            skip_passes = true;
+            // FIXME check for an is_item predicate or use matches!?
+            let mut target_body = match target_instance {
+                // FIXME an adjustemnt of None might not work right in build_call
+                ty::InstanceDef::Item(..) => build_call_shim(
+                    tcx,
+                    *target_instance,
+                    Some(Adjustment::Identity),
+                    CallKind::Direct(target_instance.def_id()),
+                ),
+                _ => make_shim(tcx, *target_instance),
+            };
             //FIXME add error reporting around invariant violations
             let receiver_ty = &mut target_body.local_decls[Local::from_usize(1)].ty;
             *receiver_ty = receiver_ty.rewrite_receiver(tcx, invoke_ty);
@@ -819,37 +823,56 @@ fn build_call_shim<'tcx>(
     let mut local_decls = local_decls_for_sig(&sig, span);
     let source_info = SourceInfo::outermost(span);
 
-    let rcvr_place = || {
-        assert!(rcvr_adjustment.is_some());
-        Place::from(Local::new(1 + 0))
-    };
     let mut statements = vec![];
 
-    let rcvr = rcvr_adjustment.map(|rcvr_adjustment| match rcvr_adjustment {
-        Adjustment::Identity => Operand::Move(rcvr_place()),
-        Adjustment::Deref { source: _ } => Operand::Move(tcx.mk_place_deref(rcvr_place())),
-        Adjustment::RefMut => {
-            // let rcvr = &mut rcvr;
-            let ref_rcvr = local_decls.push(
-                LocalDecl::new(
-                    Ty::new_ref(
-                        tcx,
-                        tcx.lifetimes.re_erased,
-                        ty::TypeAndMut { ty: sig.inputs()[0], mutbl: hir::Mutability::Mut },
-                    ),
-                    span,
-                )
-                .immutable(),
-            );
-            let borrow_kind = BorrowKind::Mut { kind: MutBorrowKind::Default };
-            statements.push(Statement {
-                source_info,
-                kind: StatementKind::Assign(Box::new((
-                    Place::from(ref_rcvr),
-                    Rvalue::Ref(tcx.lifetimes.re_erased, borrow_kind, rcvr_place()),
-                ))),
-            });
-            Operand::Move(Place::from(ref_rcvr))
+    let rcvr_local = Local::new(1 + 0);
+
+    // FIXME rework this relative to rcvr_place()
+    //if rcvr_adjustment.is_some() {
+    //    let orig_rcvr_ty = sig.inputs()[0];
+    //    let new_rcvr_local = local_decls.push(LocalDecl::new(orig_rcvr_ty, span).immutable());
+    //    statements.push(Statement {
+    //        source_info,
+    //        kind: StatementKind::Assign(Box::new((
+    //                    Place::from(new_rcvr_local),
+    //                    Rvalue::Cast(CastKind::Transmute, Operand::Move(Place::from(rcvr_local)), orig_rcvr_ty)
+    //                    )))
+    //    });
+    //    rcvr_local = new_rcvr_local
+    //}
+
+    let rcvr_place = || {
+        assert!(rcvr_adjustment.is_some());
+        Place::from(rcvr_local)
+    };
+
+    let rcvr = rcvr_adjustment.map(|rcvr_adjustment| {
+        match rcvr_adjustment {
+            Adjustment::Identity => Operand::Move(rcvr_place()),
+            Adjustment::Deref { source: _ } => Operand::Move(tcx.mk_place_deref(rcvr_place())),
+            Adjustment::RefMut => {
+                // let rcvr = &mut rcvr;
+                let ref_rcvr = local_decls.push(
+                    LocalDecl::new(
+                        Ty::new_ref(
+                            tcx,
+                            tcx.lifetimes.re_erased,
+                            ty::TypeAndMut { ty: sig.inputs()[0], mutbl: hir::Mutability::Mut },
+                        ),
+                        span,
+                    )
+                    .immutable(),
+                );
+                let borrow_kind = BorrowKind::Mut { kind: MutBorrowKind::Default };
+                statements.push(Statement {
+                    source_info,
+                    kind: StatementKind::Assign(Box::new((
+                        Place::from(ref_rcvr),
+                        Rvalue::Ref(tcx.lifetimes.re_erased, borrow_kind, rcvr_place()),
+                    ))),
+                });
+                Operand::Move(Place::from(ref_rcvr))
+            }
         }
     });
 
