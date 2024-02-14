@@ -23,13 +23,15 @@ use rustc_middle::mir::patch::MirPatch;
 use rustc_mir_dataflow::elaborate_drops::{self, DropElaborator, DropFlagMode, DropStyle};
 
 pub fn provide(providers: &mut Providers) {
-    providers.mir_shims = make_shim;
+    providers.mir_shims = provide_make_shim;
+}
+fn provide_make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'tcx> {
+    make_shim(tcx, instance, false)
 }
 
-fn make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'tcx> {
+fn make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>, skip_passes: bool) -> Body<'tcx> {
     debug!("make_shim({:?})", instance);
 
-    let mut skip_passes = false;
     let mut result = match instance {
         ty::InstanceDef::Item(..) => bug!("item {:?} passed to make_shim", instance),
         ty::InstanceDef::VTableShim(def_id) => {
@@ -48,7 +50,6 @@ fn make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'
             build_call_shim(tcx, instance, Some(adjustment), CallKind::Indirect(ty))
         }
         ty::InstanceDef::CfiShim { target_instance, invoke_ty } => {
-            skip_passes = true;
             // FIXME check for an is_item predicate or use matches!?
             let mut target_body = match target_instance {
                 // FIXME an adjustemnt of None might not work right in build_call
@@ -58,7 +59,7 @@ fn make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -> Body<'
                     Some(Adjustment::Identity),
                     CallKind::Direct(target_instance.def_id()),
                 ),
-                _ => make_shim(tcx, *target_instance),
+                _ => make_shim(tcx, *target_instance, true),
             };
             //FIXME add error reporting around invariant violations
             let receiver_ty = &mut target_body.local_decls[Local::from_usize(1)].ty;

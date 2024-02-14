@@ -1326,6 +1326,7 @@ impl<'tcx> Ty<'tcx> {
 
     /// Assumes this is a legal receiver, replaces the Self type with
     /// the one provided
+    #[instrument(skip(tcx), ret)]
     pub fn rewrite_receiver(self, tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Self {
         // FIXME this doesn't cover arbitrary_self_types. It's possible we should
         // suppress error here if arbitrary_self_types is added.
@@ -1354,7 +1355,10 @@ impl<'tcx> Ty<'tcx> {
                 let mut has_receiver_impl = false;
                 tcx.for_each_relevant_impl(receiver, self, |_| has_receiver_impl = true);
                 if has_receiver_impl {
-                    return Ty::new_adt(tcx, *def, tcx.mk_args(&[ty.into()]));
+                    // FIXME avoid vec?
+                    let args: Vec<_> =
+                        std::iter::once(ty.into()).chain(orig_args.into_iter().skip(1)).collect();
+                    return Ty::new_adt(tcx, *def, tcx.mk_args(args.as_slice()));
                 }
             }
             _ => (),
