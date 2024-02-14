@@ -29,7 +29,31 @@ fn provide_make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>) -
     make_shim(tcx, instance, false)
 }
 
-fn make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>, skip_passes: bool) -> Body<'tcx> {
+// FIXME this is a layering violation - this is replicating work that occurs when computing an ABI
+// It's not immediately obvious to me why this doesn't break for a VTableShim around an Arc<Self>,
+// does it just not happen?
+fn force_thin_self_ptr<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Ty<'tcx> {
+    use ty::layout::{LayoutCx, LayoutOf, MaybeResult, TyAndLayout};
+    let cx = LayoutCx { tcx, param_env: ty::ParamEnv::reveal_all() };
+    let mut receiver_layout: TyAndLayout<'_> =
+        cx.layout_of(ty).to_result().expect("unable to compute layout of receiver type");
+    // The VTableShim should have already done any `dyn Foo` -> `*const dyn Foo` coercions
+    assert!(!receiver_layout.is_unsized());
+    // If we aren't a pointer or a ref already, we better be a no-padding wrapper around one
+    while !receiver_layout.ty.is_unsafe_ptr() && !receiver_layout.ty.is_ref() {
+        receiver_layout = receiver_layout
+            .non_1zst_field(&cx)
+            .expect("not exactly one non-1-ZST field in a CFI shim receiver")
+            .1
+    }
+    receiver_layout.ty
+}
+
+fn make_shim<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    instance: ty::InstanceDef<'tcx>,
+    skip_passes: bool,
+) -> Body<'tcx> {
     debug!("make_shim({:?})", instance);
 
     let mut result = match instance {
@@ -63,7 +87,7 @@ fn make_shim<'tcx>(tcx: TyCtxt<'tcx>, instance: ty::InstanceDef<'tcx>, skip_pass
             };
             //FIXME add error reporting around invariant violations
             let receiver_ty = &mut target_body.local_decls[Local::from_usize(1)].ty;
-            *receiver_ty = receiver_ty.rewrite_receiver(tcx, invoke_ty);
+            *receiver_ty = force_thin_self_ptr(tcx, receiver_ty.rewrite_receiver(tcx, invoke_ty));
             target_body
         }
         // We are generating a call back to our def-id, which the

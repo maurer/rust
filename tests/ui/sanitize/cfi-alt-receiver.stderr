@@ -1,1 +1,0 @@
-WARN rustc_codegen_ssa::mir::locals Unexpected initial operand type: expected std::sync::Arc<dyn [Binder(Trait(Fooable), [])] + ReErased, std::alloc::Global>, found *const alloc::sync::ArcInner<dyn [Binder(Trait(Fooable), [])] + ReErased>.See <https://github.com/rust-lang/rust/issues/114858>.
