@@ -88,6 +88,7 @@ fn make_shim<'tcx>(
             //FIXME add error reporting around invariant violations
             let receiver_ty = &mut target_body.local_decls[Local::from_usize(1)].ty;
             *receiver_ty = force_thin_self_ptr(tcx, receiver_ty.rewrite_receiver(tcx, invoke_ty));
+            target_body.source.instance = instance;
             target_body
         }
         // We are generating a call back to our def-id, which the
