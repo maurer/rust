@@ -652,6 +652,13 @@ impl<'tcx> Instance<'tcx> {
         self
     }
 
+    pub fn force_thin_self(&self) -> bool {
+        match self.def {
+            InstanceDef::Virtual(..) | InstanceDef::CfiShim { .. } => true,
+            _ => false,
+        }
+    }
+
     #[instrument(level = "debug", skip(tcx), ret)]
     pub fn fn_once_adapter_instance(
         tcx: TyCtxt<'tcx>,
