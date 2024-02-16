@@ -851,21 +851,35 @@ fn build_call_shim<'tcx>(
 
     let mut statements = vec![];
 
-    let rcvr_local = Local::new(1 + 0);
+    let mut rcvr_local = Local::new(1 + 0);
 
     // FIXME rework this relative to rcvr_place()
-    //if rcvr_adjustment.is_some() {
-    //    let orig_rcvr_ty = sig.inputs()[0];
-    //    let new_rcvr_local = local_decls.push(LocalDecl::new(orig_rcvr_ty, span).immutable());
-    //    statements.push(Statement {
-    //        source_info,
-    //        kind: StatementKind::Assign(Box::new((
-    //                    Place::from(new_rcvr_local),
-    //                    Rvalue::Cast(CastKind::Transmute, Operand::Move(Place::from(rcvr_local)), orig_rcvr_ty)
-    //                    )))
-    //    });
-    //    rcvr_local = new_rcvr_local
-    //}
+    if rcvr_adjustment.is_some() {
+        let orig_rcvr_ty = sig.inputs()[0];
+        assert_eq!(local_decls[rcvr_local].ty, orig_rcvr_ty);
+        // If this explodes, try checking that it's sized too?
+        // FIXME make generation shim conditional?
+        let param_env = tcx.param_env_reveal_all_normalized(instance.def_id());
+        if tcx
+            .try_normalize_erasing_regions(param_env, orig_rcvr_ty)
+            .map(|ty| ty.is_sized(tcx, param_env))
+            .unwrap_or(false)
+        {
+            let new_rcvr_local = local_decls.push(LocalDecl::new(orig_rcvr_ty, span).immutable());
+            statements.push(Statement {
+                source_info,
+                kind: StatementKind::Assign(Box::new((
+                    Place::from(new_rcvr_local),
+                    Rvalue::Cast(
+                        CastKind::Transmute,
+                        Operand::Move(Place::from(rcvr_local)),
+                        orig_rcvr_ty,
+                    ),
+                ))),
+            });
+            rcvr_local = new_rcvr_local
+        }
+    }
 
     let rcvr_place = || {
         assert!(rcvr_adjustment.is_some());

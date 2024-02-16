@@ -1332,10 +1332,10 @@ impl<'tcx> Ty<'tcx> {
         // suppress error here if arbitrary_self_types is added.
         match self.kind() {
             ty::Ref(region, _, mutbl) => {
-                return Ty::new_ref(tcx, *region, ty::TypeAndMut { ty, mutbl: *mutbl });
+                Ty::new_ref(tcx, *region, ty::TypeAndMut { ty, mutbl: *mutbl })
             }
             ty::RawPtr(ty::TypeAndMut { mutbl, .. }) => {
-                return Ty::new_ptr(tcx, ty::TypeAndMut { ty, mutbl: *mutbl });
+                Ty::new_ptr(tcx, ty::TypeAndMut { ty, mutbl: *mutbl })
             }
             ty::Adt(def, orig_args) => {
                 if def.is_box() {
@@ -1360,10 +1360,14 @@ impl<'tcx> Ty<'tcx> {
                         std::iter::once(ty.into()).chain(orig_args.into_iter().skip(1)).collect();
                     return Ty::new_adt(tcx, *def, tcx.mk_args(args.as_slice()));
                 }
+                bug!("Tried to rewrite receiver on nown Receiver implementing ADT: {self}")
             }
-            _ => (),
+            // FIXME validate the rewrite in a debug assert
+            ty::Closure(..) | ty::FnPtr(..) | ty::FnDef(..) => {
+                Ty::new_ptr(tcx, ty::TypeAndMut { ty, mutbl: ty::Mutability::Mut })
+            }
+            _ => bug!("Tried to rewrite receiver on a non-receiver type: {self}"),
         }
-        bug!("Tried to rewrite receiver on a non-receiver type: {self}")
     }
 }
 

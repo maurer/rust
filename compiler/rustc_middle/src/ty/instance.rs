@@ -158,24 +158,33 @@ impl<'tcx> Instance<'tcx> {
                 ty::Closure(_, args) => args.as_closure().sig(),
                 _ => ty.fn_sig(tcx),
             };
-            debug!("base_sig: {base_sig:?}:");
+            debug!("base_sig: {base_sig}");
             let sig = base_sig.map_bound(|sig| {
-                if sig.abi == Abi::RustCall {
+                // FIXME if this works, merge some of the logic
+                // FIXME This is a guesswork hack
+                if sig.abi == Abi::RustCall && sig.inputs().len() == 1 {
+                    // FIXME might be an unused branch now
                     let receiver = Ty::new_ptr(
                         tcx,
                         ty::TypeAndMut { ty: invoke_ty, mutbl: ty::Mutability::Mut },
                     );
-                    let inputs = std::iter::once(receiver).chain(sig.inputs().into_iter().copied());
-                    tcx.mk_fn_sig(inputs, sig.output(), sig.c_variadic, sig.unsafety, sig.abi)
+                    let inputs = std::iter::once(receiver)
+                        .chain(sig.inputs().into_iter().copied())
+                        .map(|ty| tcx.normalize_erasing_regions(param_env, ty));
+                    let output = tcx.normalize_erasing_regions(param_env, sig.output());
+                    tcx.mk_fn_sig(inputs, output, sig.c_variadic, sig.unsafety, sig.abi)
                 } else {
                     let receiver = sig.inputs()[0].rewrite_receiver(tcx, invoke_ty);
-                    let inputs =
-                        std::iter::once(receiver).chain(sig.inputs().into_iter().skip(1).copied());
+                    let inputs = std::iter::once(receiver)
+                        .chain(sig.inputs().into_iter().skip(1).copied())
+                        .map(|ty| tcx.normalize_erasing_regions(param_env, ty));
+                    let output = tcx.normalize_erasing_regions(param_env, sig.output());
                     // This is repeated because our iterators are different types, so we can't just
                     // assign back to an upper-scope `inputs`
-                    tcx.mk_fn_sig(inputs, sig.output(), sig.c_variadic, sig.unsafety, sig.abi)
+                    tcx.mk_fn_sig(inputs, output, sig.c_variadic, sig.unsafety, sig.abi)
                 }
             });
+            debug!("transformed_sig: {sig}");
             let ty = Ty::new_fn_ptr(tcx, sig);
             debug!("Transformed to {ty}");
             ty

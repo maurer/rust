@@ -702,6 +702,14 @@ fn encode_ty<'tcx>(
                 ty::Dyn => "u3dynI",
                 ty::DynStar => "u7dynstarI",
             });
+            // FIXME can this be receiver only?
+            let predicates = if let Some(principal) = predicates.principal() {
+                tcx.mk_poly_existential_predicates(&[
+                    principal.map_bound(ExistentialPredicate::Trait)
+                ])
+            } else {
+                predicates
+            };
             s.push_str(&encode_predicates(tcx, predicates, dict, options));
             s.push_str(&encode_region(tcx, *region, dict, options));
             s.push('E');
@@ -1068,6 +1076,7 @@ pub fn typeid_for_fnabi<'tcx>(
 
 /// Returns a type metadata identifier for the specified FnSig using the Itanium C++ ABI with vendor
 /// extended type qualifiers and types for Rust types that are not used at the FFI boundary.
+#[instrument(skip(tcx), ret)]
 pub fn typeid_for_fnsig<'tcx>(
     tcx: TyCtxt<'tcx>,
     fn_sig: &FnSig<'tcx>,
@@ -1103,6 +1112,7 @@ pub fn typeid_for_fnsig<'tcx>(
 
 /// Returns a type metadata identifier for the specified Instance using the Itanium C++ ABI with
 /// vendor extended type qualifiers and types for Rust types that are not used at the FFI boundary.
+#[instrument(skip(tcx), ret)]
 pub fn typeid_for_instance<'tcx>(
     tcx: TyCtxt<'tcx>,
     instance: &Instance<'tcx>,
