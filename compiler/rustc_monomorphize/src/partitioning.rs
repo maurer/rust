@@ -1143,7 +1143,12 @@ fn collect_and_partition_mono_items(tcx: TyCtxt<'_>, (): ()) -> (&DefIdSet, &[Co
     let mono_items: DefIdSet = items
         .iter()
         .filter_map(|mono_item| match *mono_item {
-            MonoItem::Fn(ref instance) => Some(instance.def_id()),
+            // Don't count CfiShim's def_id, that resolves to a child instance
+            MonoItem::Fn(ref instance)
+                if !matches!(instance.def, ty::InstanceDef::CfiShim { .. }) =>
+            {
+                Some(instance.def_id())
+            }
             MonoItem::Static(def_id) => Some(def_id),
             _ => None,
         })
