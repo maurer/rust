@@ -18,7 +18,7 @@ use rustc_middle::ty::{
 use rustc_middle::ty::{GenericArg, GenericArgKind, GenericArgsRef};
 use rustc_span::def_id::DefId;
 use rustc_span::sym;
-use rustc_target::abi::call::{Conv, FnAbi};
+use rustc_target::abi::call::{Conv, FnAbi, PassMode};
 use rustc_target::abi::Integer;
 use rustc_target::spec::abi::Abi;
 use std::fmt::Write as _;
@@ -1036,9 +1036,18 @@ pub fn typeid_for_fnabi<'tcx>(
     // Encode the parameter types
     if !fn_abi.c_variadic {
         if !fn_abi.args.is_empty() {
+            //FIXME clean up control flow
+            let mut pushed_arg = false;
             for arg in fn_abi.args.iter() {
+                if arg.mode == PassMode::Ignore {
+                    continue;
+                }
+                pushed_arg = true;
                 let ty = transform_ty(tcx, arg.layout.ty, transform_ty_options);
                 typeid.push_str(&encode_ty(tcx, ty, &mut dict, encode_ty_options));
+            }
+            if !pushed_arg {
+                typeid.push('v');
             }
         } else {
             // Empty parameter lists, whether declared as () or conventionally as (void), are
