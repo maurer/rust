@@ -704,7 +704,7 @@ fn encode_ty<'tcx>(
                     principal.map_bound(ExistentialPredicate::Trait)
                 ])
             } else {
-                predicates
+                List::empty()
             };
             s.push_str(&encode_predicates(tcx, predicates, dict, options));
             s.push_str(&encode_region(*region, dict));
@@ -753,7 +753,11 @@ fn transform_predicates<'tcx>(
             ty::ExistentialPredicate::AutoTrait(..) => Some(predicate),
         })
         .collect();
-    tcx.mk_poly_existential_predicates(&predicates)
+    if predicates.len() == 0 {
+        List::empty()
+    } else {
+        tcx.mk_poly_existential_predicates(&predicates)
+    }
 }
 
 /// Transforms args for being encoded and used in the substitution dictionary.

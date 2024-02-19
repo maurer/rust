@@ -1247,7 +1247,7 @@ fn create_mono_items_for_vtable_methods<'tcx>(
 
             Some(invoke_ty)
         } else {
-            None
+            Some(Ty::new_dynamic(tcx, ty::List::empty(), tcx.lifetimes.re_erased, ty::Dyn))
         };
 
         // Also add the destructor
