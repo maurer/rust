@@ -747,9 +747,8 @@ fn transform_predicates<'tcx>(
     tcx: TyCtxt<'tcx>,
     predicates: &List<ty::PolyExistentialPredicate<'tcx>>,
 ) -> &'tcx List<ty::PolyExistentialPredicate<'tcx>> {
-    let predicates: Vec<ty::PolyExistentialPredicate<'tcx>> = predicates
-        .iter()
-        .filter_map(|predicate| match predicate.skip_binder() {
+    tcx.mk_poly_existential_predicates_from_iter(predicates.iter().filter_map(|predicate| {
+        match predicate.skip_binder() {
             ty::ExistentialPredicate::Trait(trait_ref) => {
                 let trait_ref = ty::TraitRef::identity(tcx, trait_ref.def_id);
                 Some(ty::Binder::dummy(ty::ExistentialPredicate::Trait(
@@ -758,9 +757,8 @@ fn transform_predicates<'tcx>(
             }
             ty::ExistentialPredicate::Projection(..) => None,
             ty::ExistentialPredicate::AutoTrait(..) => Some(predicate),
-        })
-        .collect();
-    tcx.mk_poly_existential_predicates(&predicates)
+        }
+    }))
 }
 
 /// Transforms args for being encoded and used in the substitution dictionary.
@@ -1177,7 +1175,11 @@ fn strip_receiver_auto<'tcx>(
                 !matches!(pred.skip_binder(), ty::ExistentialPredicate::AutoTrait(..))
             }))
         } else {
-            ty::List::empty()
+            // If there's no principal type, re-encode it as a dyn Destruct, since the only thing we know about it is that it has a `drop_in_place` implementation.
+            let destruct = tcx.require_lang_item(hir::LangItem::Destruct, None);
+            tcx.mk_poly_existential_predicates(&[ty::Binder::dummy(
+                ty::ExistentialPredicate::AutoTrait(destruct),
+            )])
         };
     let new_rcvr = Ty::new_dynamic(tcx, filtered_preds, *lifetime, *kind);
     tcx.mk_args_trait(new_rcvr, args.into_iter().skip(1))
