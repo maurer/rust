@@ -1214,14 +1214,35 @@ fn create_mono_items_for_vtable_methods<'tcx>(
                     | VtblEntry::MetadataSize
                     | VtblEntry::MetadataAlign
                     | VtblEntry::Vacant => None,
-                    VtblEntry::TraitVPtr(_) => {
-                        // all super trait items already covered, so skip them.
+                    VtblEntry::TraitVPtr(super_trait) => {
+                        let pep: ty::PolyExistentialPredicate<'tcx> = super_trait.map_bound(|t| {
+                            ty::ExistentialPredicate::Trait(ty::ExistentialTraitRef::erase_self_ty(
+                                tcx, t,
+                            ))
+                        });
+                        let existential_predicates = tcx.mk_poly_existential_predicates(&[pep]);
+                        let super_trait_ty = Ty::new_dynamic(
+                            tcx,
+                            existential_predicates,
+                            tcx.lifetimes.re_erased,
+                            ty::Dyn,
+                        );
+
+                        create_mono_items_for_vtable_methods(
+                            tcx,
+                            super_trait_ty,
+                            impl_ty,
+                            source,
+                            output,
+                        );
                         None
                     }
                     VtblEntry::Method(instance) => Some(instance.cfi_shim(tcx, invoke_ty))
                         .filter(|instance| should_codegen_locally(tcx, instance)),
                 })
-                .map(|item| create_fn_mono_item(tcx, item, source));
+                // FIXME shouldn't need to collect here
+                .map(|item| create_fn_mono_item(tcx, item, source))
+                .collect::<Vec<_>>();
             output.extend(methods);
 
             Some(invoke_ty)
