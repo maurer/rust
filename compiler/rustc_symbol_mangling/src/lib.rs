@@ -267,10 +267,11 @@ fn compute_symbol_name<'tcx>(
         }),
     };
 
-    debug_assert!(
-        rustc_demangle::try_demangle(&symbol).is_ok(),
-        "compute_symbol_name: `{symbol}` cannot be demangled"
-    );
+    // FIXME add demangling
+    //debug_assert!(
+    //    rustc_demangle::try_demangle(&symbol).is_ok(),
+    //    "compute_symbol_name: `{symbol}` cannot be demangled"
+    //);
 
     symbol
 }

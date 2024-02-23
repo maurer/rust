@@ -490,6 +490,8 @@ impl<'tcx> Printer<'tcx> for SymbolMangler<'tcx> {
         // [<Trait> [{<Projection>}]] [{<Auto>}]
         // Since any predicates after the first one shouldn't change the binders,
         // just put them all in the binders of the first.
+        // FIXME
+        if predicates.len() > 0 {
         self.in_binder(&predicates[0], |cx, _| {
             for predicate in predicates.iter() {
                 // It would be nice to be able to validate bound vars here, but
@@ -519,6 +521,7 @@ impl<'tcx> Printer<'tcx> for SymbolMangler<'tcx> {
             }
             Ok(())
         })?;
+        }
 
         self.push("E");
         Ok(())
