@@ -46,6 +46,7 @@ pub(super) fn mangle<'tcx>(
         ty::InstanceDef::VTableShim(_) => Some("vtable"),
         ty::InstanceDef::ReifyShim(_) => Some("reify"),
         // FIXME THIS CAN COLLIDE! Need to figure out how to include invoke_ty
+        // FIXME can this collide on target_instance?
         ty::InstanceDef::CfiShim { .. } => Some("cfi"),
 
         ty::InstanceDef::ConstructCoroutineInClosureShim { target_kind, .. }
@@ -63,6 +64,9 @@ pub(super) fn mangle<'tcx>(
     } else {
         cx.print_def_path(def_id, args).unwrap()
     };
+    if let ty::InstanceDef::CfiShim {invoke_ty, .. } = instance.def {
+        cx.print_type(invoke_ty).unwrap();
+    }
     if let Some(instantiating_crate) = instantiating_crate {
         cx.print_def_path(instantiating_crate.as_def_id(), &[]).unwrap();
     }
