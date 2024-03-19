@@ -1,0 +1,16 @@
+change-id = 121754
+
+[rust]
+codegen-tests = false
+llvm-libunwind = "system"
+
+[llvm]
+download-ci-llvm = false
+link-shared = true
+
+[target.x86_64-unknown-linux-gnu]
+llvm-config = "/usr/local/google/home/mmaurer/android/linux-15-6.6/prebuilts/clang/host/linux-x86/clang-r510928/bin/llvm-config"
+cc = "/usr/local/google/home/mmaurer/android/linux-15-6.6/prebuilts/clang/host/linux-x86/clang-r510928/bin/clang"
+cxx = "/usr/local/google/home/mmaurer/android/linux-15-6.6/prebuilts/clang/host/linux-x86/clang-r510928/bin/clang++"
+ar = "/usr/local/google/home/mmaurer/android/linux-15-6.6/prebuilts/clang/host/linux-x86/clang-r510928/bin/llvm-ar"
+linker = "/usr/local/google/home/mmaurer/android/linux-15-6.6/prebuilts/clang/host/linux-x86/clang-r510928/bin/clang"

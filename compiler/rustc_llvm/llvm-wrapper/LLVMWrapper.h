@@ -32,6 +32,8 @@
   (LLVM_VERSION_MAJOR > (major) ||                                             \
    LLVM_VERSION_MAJOR == (major) && LLVM_VERSION_MINOR >= (minor))
 
+#define LLVM_R510928 true
+
 #define LLVM_VERSION_LT(major, minor) (!LLVM_VERSION_GE((major), (minor)))
 
 #include "llvm/IR/LegacyPassManager.h"

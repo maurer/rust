@@ -275,7 +275,7 @@ fn main() {
     }
     cmd.args(&components);
 
-    for lib in output(&mut cmd).split_whitespace() {
+    for lib in &["-lLLVM"] {
         let name = if let Some(stripped) = lib.strip_prefix("-l") {
             stripped
         } else if let Some(stripped) = lib.strip_prefix('-') {

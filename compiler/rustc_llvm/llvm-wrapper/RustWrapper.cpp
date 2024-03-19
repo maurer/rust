@@ -1011,7 +1011,7 @@ extern "C" LLVMMetadataRef LLVMRustDIBuilderCreateStaticMemberType(
     unwrapDI<DIType>(Ty),
     fromRust(Flags),
     unwrap<llvm::ConstantInt>(val),
-#if LLVM_VERSION_GE(18, 0)
+#if LLVM_VERSION_GE(18, 0) && !LLVM_R510928
     llvm::dwarf::DW_TAG_member,
 #endif
     AlignInBits
@@ -1142,7 +1142,7 @@ extern "C" LLVMMetadataRef LLVMRustDIBuilderCreateEnumerationType(
       unwrapDI<DIFile>(File), LineNumber,
       SizeInBits, AlignInBits, DINodeArray(unwrapDI<MDTuple>(Elements)),
       unwrapDI<DIType>(ClassTy),
-#if LLVM_VERSION_GE(18, 0)
+#if LLVM_VERSION_GE(18, 0) && !LLVM_R510928
       /* RunTimeLang */ 0,
 #endif
       "", IsScoped));

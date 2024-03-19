@@ -237,7 +237,7 @@ enum class LLVMRustCodeGenOptLevel {
   Aggressive,
 };
 
-#if LLVM_VERSION_GE(18, 0)
+#if LLVM_VERSION_GE(18, 0) && !LLVM_R510928
   using CodeGenOptLevelEnum = llvm::CodeGenOptLevel;
 #else
   using CodeGenOptLevelEnum = llvm::CodeGenOpt::Level;
@@ -372,7 +372,7 @@ extern "C" void LLVMRustPrintTargetCPUs(LLVMTargetMachineRef TM,
 }
 
 extern "C" size_t LLVMRustGetTargetFeaturesCount(LLVMTargetMachineRef TM) {
-#if LLVM_VERSION_GE(18, 0)
+#if LLVM_VERSION_GE(18, 0) && !LLVM_R510928
   const TargetMachine *Target = unwrap(TM);
   const MCSubtargetInfo *MCInfo = Target->getMCSubtargetInfo();
   const ArrayRef<SubtargetFeatureKV> FeatTable = MCInfo->getAllProcessorFeatures();
@@ -384,7 +384,7 @@ extern "C" size_t LLVMRustGetTargetFeaturesCount(LLVMTargetMachineRef TM) {
 
 extern "C" void LLVMRustGetTargetFeature(LLVMTargetMachineRef TM, size_t Index,
                                          const char** Feature, const char** Desc) {
-#if LLVM_VERSION_GE(18, 0)
+#if LLVM_VERSION_GE(18, 0) && !LLVM_R510928
   const TargetMachine *Target = unwrap(TM);
   const MCSubtargetInfo *MCInfo = Target->getMCSubtargetInfo();
   const ArrayRef<SubtargetFeatureKV> FeatTable = MCInfo->getAllProcessorFeatures();
@@ -580,13 +580,13 @@ enum class LLVMRustFileType {
 static CodeGenFileType fromRust(LLVMRustFileType Type) {
   switch (Type) {
   case LLVMRustFileType::AssemblyFile:
-#if LLVM_VERSION_GE(18, 0)
+#if LLVM_VERSION_GE(18, 0) && !LLVM_R510928
     return CodeGenFileType::AssemblyFile;
 #else
     return CGFT_AssemblyFile;
 #endif
   case LLVMRustFileType::ObjectFile:
-#if LLVM_VERSION_GE(18, 0)
+#if LLVM_VERSION_GE(18, 0) && !LLVM_R510928
     return CodeGenFileType::ObjectFile;
 #else
     return CGFT_ObjectFile;
@@ -893,7 +893,7 @@ LLVMRustOptimize(
         // cargo run tests in multhreading mode by default
         // so use atomics for coverage counters
         Options.Atomic = true;
-#if LLVM_VERSION_GE(18, 0)
+#if LLVM_VERSION_GE(18, 0) && !LLVM_R510928
         MPM.addPass(InstrProfilingLoweringPass(Options, false));
 #else
         MPM.addPass(InstrProfiling(Options, false));
@@ -1302,7 +1302,7 @@ LLVMRustCreateThinLTOData(LLVMRustThinLTOModule *modules,
 
     Ret->ModuleMap[module->identifier] = mem_buffer;
 
-#if LLVM_VERSION_GE(18, 0)
+#if LLVM_VERSION_GE(18, 0) && !LLVM_R510928
     if (Error Err = readModuleSummaryIndex(mem_buffer, Ret->Index)) {
 #else
     if (Error Err = readModuleSummaryIndex(mem_buffer, Ret->Index, i)) {
