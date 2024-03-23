@@ -93,6 +93,7 @@
 #![allow(rustc::potential_query_instability)]
 #![deny(rustc::untranslatable_diagnostic)]
 #![deny(rustc::diagnostic_outside_of_impl)]
+#![feature(let_chains)]
 
 #[macro_use]
 extern crate rustc_middle;
