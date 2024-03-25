@@ -450,6 +450,20 @@ impl<'tcx> Instance<'tcx> {
                     debug!(" => fn pointer created for virtual call");
                     resolved.def = InstanceDef::ReifyShim(def_id, reason);
                 }
+                // FIXME(maurer) only shim it if it is a vtable-safe function
+                _ if tcx.sess.is_sanitizer_kcfi_enabled()
+                    && tcx.associated_item(def_id).trait_item_def_id.is_some() =>
+                {
+                    // If this function could also go in a vtable, we need to `ReifyShim` it with
+                    // KCFI because it can only attach one type per function.
+                    resolved.def = InstanceDef::ReifyShim(resolved.def_id(), reason)
+                }
+                _ if tcx.sess.is_sanitizer_kcfi_enabled()
+                    && tcx.is_closure(resolved.def_id()) =>
+                {
+                    // Reroute through a reify via the *original*
+                    resolved = Instance { def: InstanceDef::ReifyShim(def_id, reason), args }
+                }
                 _ => {}
             }
 
