@@ -12,6 +12,7 @@ pub fn target() -> Target {
             max_atomic_width: Some(128),
             supported_sanitizers: SanitizerSet::ADDRESS
                 | SanitizerSet::CFI
+                | SanitizerSet::KCFI
                 | SanitizerSet::LEAK
                 | SanitizerSet::MEMORY
                 | SanitizerSet::MEMTAG

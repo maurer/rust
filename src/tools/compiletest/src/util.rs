@@ -46,7 +46,11 @@ pub const CFI_SUPPORTED_TARGETS: &[&str] = &[
     "x86_64-unknown-netbsd",
 ];
 
-pub const KCFI_SUPPORTED_TARGETS: &[&str] = &["aarch64-linux-none", "x86_64-linux-none"];
+pub const KCFI_SUPPORTED_TARGETS: &[&str] = &[
+    "aarch64-linux-none",
+    "x86_64-linux-none",
+    "x86_64-unknown-linux-gnu",
+];
 
 pub const KASAN_SUPPORTED_TARGETS: &[&str] = &[
     "aarch64-unknown-none",
