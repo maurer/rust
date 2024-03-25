@@ -183,7 +183,7 @@ impl<'tcx> Inliner<'tcx> {
             }
         }
 
-        self.check_mir_is_available(caller_body, &callsite.callee)?;
+        self.check_mir_is_available(caller_body, callsite.callee)?;
         let callee_body = try_instance_mir(self.tcx, callsite.callee.def)?;
         self.check_mir_body(callsite, callee_body, callee_attrs)?;
 
@@ -274,7 +274,7 @@ impl<'tcx> Inliner<'tcx> {
     fn check_mir_is_available(
         &self,
         caller_body: &Body<'tcx>,
-        callee: &Instance<'tcx>,
+        callee: Instance<'tcx>,
     ) -> Result<(), &'static str> {
         let caller_def_id = caller_body.source.def_id();
         let callee_def_id = callee.def_id();
@@ -328,7 +328,7 @@ impl<'tcx> Inliner<'tcx> {
 
             // If we know for sure that the function we're calling will itself try to
             // call us, then we avoid inlining that function.
-            if self.tcx.mir_callgraph_reachable((*callee, caller_def_id.expect_local())) {
+            if self.tcx.mir_callgraph_reachable((callee, caller_def_id.expect_local())) {
                 return Err("caller might be reachable from callee (query cycle avoidance)");
             }
 
