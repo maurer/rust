@@ -2,7 +2,7 @@ use rustc_data_structures::stable_hasher::{Hash64, HashStable, StableHasher};
 use rustc_hir::def_id::CrateNum;
 use rustc_hir::definitions::{DefPathData, DisambiguatedDefPathData};
 use rustc_middle::ty::print::{PrettyPrinter, Print, Printer};
-use rustc_middle::ty::{self, Instance, Ty, TyCtxt, TypeVisitableExt};
+use rustc_middle::ty::{self, Instance, ReifyReason, Ty, TyCtxt, TypeVisitableExt};
 use rustc_middle::ty::{GenericArg, GenericArgKind};
 use rustc_middle::util::common::record_time;
 
@@ -65,16 +65,23 @@ pub(super) fn mangle<'tcx>(
         )
         .unwrap();
 
-    if let ty::InstanceDef::ThreadLocalShim(..) = instance.def {
-        let _ = printer.write_str("{{tls-shim}}");
-    }
-
-    if let ty::InstanceDef::VTableShim(..) = instance.def {
-        let _ = printer.write_str("{{vtable-shim}}");
-    }
-
-    if let ty::InstanceDef::ReifyShim(..) = instance.def {
-        let _ = printer.write_str("{{reify-shim}}");
+    match instance.def {
+        ty::InstanceDef::ThreadLocalShim(..) => {
+            printer.write_str("{{tls-shim}}").unwrap();
+        }
+        ty::InstanceDef::VTableShim(..) => {
+            printer.write_str("{{vtable-shim}}").unwrap();
+        }
+        ty::InstanceDef::ReifyShim(_, reason) => {
+            printer.write_str("{{reify-shim").unwrap();
+            match reason {
+                Some(ReifyReason::FnPtr) => printer.write_str("-fnptr").unwrap(),
+                Some(ReifyReason::Vtable) => printer.write_str("-vtable").unwrap(),
+                None => (),
+            }
+            printer.write_str("}}").unwrap();
+        }
+        _ => {}
     }
 
     printer.path.finish(hash)

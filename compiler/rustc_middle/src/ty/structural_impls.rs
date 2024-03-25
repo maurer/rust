@@ -494,6 +494,7 @@ TrivialTypeTraversalAndLiftImpls! {
     crate::ty::IntVarValue,
     crate::ty::ParamConst,
     crate::ty::ParamTy,
+    crate::ty::instance::ReifyReason,
     crate::ty::adjustment::PointerCoercion,
     crate::ty::RegionVid,
     crate::ty::UniverseIndex,
