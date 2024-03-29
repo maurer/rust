@@ -131,6 +131,10 @@ pub struct SanitizerCfiGeneralizePointersRequiresCfi;
 pub struct SanitizerCfiNormalizeIntegersRequiresCfi;
 
 #[derive(Diagnostic)]
+#[diag(session_sanitizer_kcfi_requires_panic_abort)]
+pub(crate) struct SanitizerKcfiRequiresPanicAbort;
+
+#[derive(Diagnostic)]
 #[diag(session_split_lto_unit_requires_lto)]
 pub struct SplitLtoUnitRequiresLto;
 

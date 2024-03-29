@@ -1,7 +1,7 @@
 // Verifies that "kcfi" module flag is added.
 //
 // needs-sanitizer-kcfi
-// compile-flags: -Ctarget-feature=-crt-static -Zsanitizer=kcfi
+// compile-flags: -Ctarget-feature=-crt-static -Zsanitizer=kcfi -C panic=abort
 
 #![crate_type="lib"]
 
