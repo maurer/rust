@@ -2750,6 +2750,8 @@ written to standard error output)"),
     virtual_function_elimination: bool = (false, parse_bool, [TRACKED],
         "enables dead virtual function elimination optimization. \
         Requires `-Clto[=[fat,yes]]`"),
+    warn_stack_size: Option<usize> = (None, parse_opt_number, [TRACKED],
+        "maximum stack frame size before warning"),
     wasi_exec_model: Option<WasiExecModel> = (None, parse_wasi_exec_model, [TRACKED],
         "whether to build a wasi command or reactor"),
     // This option only still exists to provide a more gradual transition path for people who need

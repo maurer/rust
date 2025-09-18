@@ -75,6 +75,9 @@ pub(crate) fn declare_raw_fn<'ll, 'tcx>(
     if cx.tcx.sess.opts.cg.no_redzone.unwrap_or(cx.tcx.sess.target.disable_redzone) {
         attrs.push(llvm::AttributeKind::NoRedZone.create_attr(cx.llcx));
     }
+    if let Some(max_stack) = cx.tcx.sess.opts.unstable_opts.warn_stack_size {
+        attrs.push(llvm::CreateAttrStringValue(cx.llcx, "warn-stack-size", &max_stack.to_string()));
+    }
 
     attrs.extend(attributes::non_lazy_bind_attr(cx));
 
